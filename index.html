@@ -1,0 +1,223 @@
+<!-- /index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Corruption Game Web UI</title>
+  <link rel="stylesheet" href="style.css?v=21"/>
+  <!-- Inline 1px favicon to avoid 404s -->
+  <link rel="icon" href="data:;base64,iVBORw0KGgo=">
+  <style>
+    /* Only used for the local-file warning overlay */
+    #file-mode-overlay{
+      position:fixed; inset:0; display:none; place-items:center; z-index:2000;
+      background:rgba(0,0,0,.85); color:#e6e6eb; font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;
+    }
+    #file-mode-overlay .card{
+      width:min(720px,94vw); background:#16161a; border:1px solid #6e6e78; border-radius:12px;
+      padding:16px; box-shadow:0 10px 30px #000a, 0 0 0 1px #0005 inset;
+    }
+    #file-mode-overlay pre{
+      margin-top:8px; padding:10px; border-radius:8px; background:#0d0d10; border:1px solid #28282d; overflow:auto;
+      line-height:1.3; font-size:13px;
+    }
+  </style>
+  <script>
+    // Show a helpful overlay only when opened via file://
+    (function(){
+      if (location.protocol === 'file:') {
+        document.addEventListener('DOMContentLoaded', () => {
+          const ov = document.getElementById('file-mode-overlay');
+          if (ov) ov.style.display = 'grid';
+        });
+      }
+    })();
+  </script>
+</head>
+<body>
+  <!-- ===== Local file overlay (only visible on file://) ===== -->
+  <div id="file-mode-overlay" aria-live="polite">
+    <div class="card">
+      <h1 style="margin-bottom:8px;">Start a local server to run modules</h1>
+      <p>Your browser blocked ES module imports from <code>file://</code>. Serve this folder over HTTP, then open <code>http://127.0.0.1:5500/</code>.</p>
+      <pre><code># Windows PowerShell (from this folder)
+python -m http.server 5500
+# or:
+py -m http.server 5500
+
+# Then browse:
+http://127.0.0.1:5500/index.html</code></pre>
+    </div>
+  </div>
+
+  <!-- ===== Players Setup (first screen) ===== -->
+  <div id="players-setup" class="modal" role="dialog" aria-modal="true">
+    <div class="cc-card" role="document" aria-labelledby="players-setup-title">
+      <h1 id="players-setup-title">Party Size</h1>
+      <form id="players-form">
+        <div class="cc-row">
+          <label for="player-count">How many players?</label>
+          <select id="player-count" required>
+            <option value="1">1 player</option>
+            <option value="2" selected>2 players</option>
+            <option value="3">3 players</option>
+            <option value="4">4 players</option>
+          </select>
+        </div>
+        <div class="cc-actions">
+          <button type="submit" class="primary">Continue</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===== Character Creation (shown once per player) ===== -->
+  <div id="char-create" class="modal" role="dialog" aria-modal="true" hidden>
+    <div class="cc-card" role="document" aria-labelledby="cc-title">
+      <h1 id="cc-title">Create Your Character</h1>
+      <form id="cc-form">
+        <div class="cc-row">
+          <label for="cc-name">Name</label>
+          <input id="cc-name" name="name" type="text" maxlength="24" placeholder="Adventurer" required />
+        </div>
+        <div class="cc-row">
+          <label for="cc-class">Class</label>
+          <select id="cc-class" name="class" required>
+            <option value="Warrior">Warrior</option>
+            <option value="Survivalist">Survivalist</option>
+            <option value="Elementalist" selected>Elementalist</option>
+          </select>
+        </div>
+        <div class="cc-row">
+          <label for="cc-affinity">Affinity</label>
+          <select id="cc-affinity" name="affinity" required></select>
+        </div>
+        <fieldset class="cc-attrs">
+          <legend>Attributes (start 8, +10 pts, range 8–16)</legend>
+          <div class="attr-row" data-attr="A1">
+            <div class="attr-label"><span class="attr-name" id="attrA1Name">Attr 1</span></div>
+            <div class="attr-controls">
+              <button type="button" class="attr-dec" aria-label="decrease">−</button>
+              <output class="attr-value">8</output>
+              <button type="button" class="attr-inc" aria-label="increase">+</button>
+            </div>
+            <div class="attr-mod">mod <output class="attr-mod-val">-1</output></div>
+          </div>
+          <div class="attr-row" data-attr="A2">
+            <div class="attr-label"><span class="attr-name" id="attrA2Name">Attr 2</span></div>
+            <div class="attr-controls">
+              <button type="button" class="attr-dec" aria-label="decrease">−</button>
+              <output class="attr-value">8</output>
+              <button type="button" class="attr-inc" aria-label="increase">+</button>
+            </div>
+            <div class="attr-mod">mod <output class="attr-mod-val">-1</output></div>
+          </div>
+          <div class="attr-row" data-attr="A3">
+            <div class="attr-label"><span class="attr-name" id="attrA3Name">Attr 3</span></div>
+            <div class="attr-controls">
+              <button type="button" class="attr-dec" aria-label="decrease">−</button>
+              <output class="attr-value">8</output>
+              <button type="button" class="attr-inc" aria-label="increase">+</button>
+            </div>
+            <div class="attr-mod">mod <output class="attr-mod-val">-1</output></div>
+          </div>
+          <div class="cc-points">
+            Points Remaining: <output id="points-remaining">10</output>
+          </div>
+        </fieldset>
+        <div class="cc-actions">
+          <button type="submit" class="primary">Save Character</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===== NEW: Spell Selection (shown immediately after saving each character) ===== -->
+  <div id="spell-select-modal" class="modal" role="dialog" aria-modal="true" hidden>
+    <div class="cc-card" role="document" aria-labelledby="ss-title">
+      <h1 id="ss-title">Starter Spells</h1>
+      <!-- Passive grant line: e.g., “You selected Flame… You have been granted Inferno …” -->
+      <p id="ss-passive" class="passive-line"></p>
+      <div id="ss-affinity-note" class="dim-line"></div>
+      <ul id="ss-list" class="deck-list"></ul>
+      <div class="cc-actions">
+        <div id="ss-counter" class="dim-line" style="margin-right:auto">Choose 3 spells.</div>
+        <button id="ss-confirm" class="primary" disabled>Confirm Spells</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Main App (hidden until all characters created) ===== -->
+  <div id="app-root" hidden>
+    <header id="top-bar" aria-label="Turn bar">
+      <nav id="pill-bar" aria-hidden="true">
+        <span class="pill active">P1</span>
+        <span class="pill">P2</span>
+        <span class="pill">P3</span>
+        <span class="pill">P4</span>
+      </nav>
+      <div id="turn-counter" aria-label="Turn counter">
+        <div id="xp-bar">
+          <div class="xp-segment"></div><div class="xp-segment"></div><div class="xp-segment"></div><div class="xp-segment"></div><div class="xp-segment"></div>
+          <div class="xp-segment"></div><div class="xp-segment"></div><div class="xp-segment"></div><div class="xp-segment"></div><div class="xp-segment"></div>
+        </div>
+        <div class="top-actions">
+          <button id="btn-boss-deck" class="ghost">Boss Deck</button>
+        </div>
+      </div>
+    </header>
+
+    <main id="main-area">
+      <aside id="left-party" aria-label="Party"></aside>
+      <section id="board" aria-label="Board"></section>
+      <aside id="right-dock">
+        <div class="panel" id="dock-panel">
+          <h2 id="dock-title">Character Sheet</h2>
+          <div class="kv"></div>
+          <div id="dock-content"></div>
+        </div>
+      </aside>
+    </main>
+
+    <footer id="bottom-bar">
+      <section id="context-panel">
+        <p id="context-text">R to roll. WASD to move. Step on a cave entrance to enter the cave.</p>
+      </section>
+    </footer>
+  </div>
+
+  <!-- ===== Boss Deck Viewer ===== -->
+  <div id="boss-deck-modal" class="modal" role="dialog" aria-modal="true" hidden>
+    <div class="cc-card" role="document" aria-labelledby="boss-deck-title">
+      <h1 id="boss-deck-title">Boss Deck</h1>
+      <div id="boss-deck-stats" class="deck-stats"></div>
+      <div class="deck-columns">
+        <div>
+          <h2>Draw Pile</h2>
+          <ul id="boss-deck-list" class="deck-list"></ul>
+        </div>
+        <div>
+          <h2>Discard</h2>
+          <ul id="boss-discard-list" class="deck-list"></ul>
+        </div>
+      </div>
+      <div class="cc-actions">
+        <button id="boss-deck-close" class="primary">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Static module script (works over HTTP). If you open via file://, see overlay above. -->
+  <script type="module" src="./main.js?v=25"></script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
