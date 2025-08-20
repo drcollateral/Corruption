@@ -58,6 +58,15 @@ export function updateActionBar(model){
   refs.burnBtn.disabled = !model.player.canBurn;
   refs.infernoBtn.disabled = !model.player.canInferno;
 
+  // Visual feedback for active Inferno
+  if (model.player.hasInferno) {
+    refs.burnBtn.textContent = "Cast: Burn 🔥";
+    refs.burnBtn.classList.add("enhanced");
+  } else {
+    refs.burnBtn.textContent = "Cast: Burn";
+    refs.burnBtn.classList.remove("enhanced");
+  }
+
   refs.dotAction.classList.toggle("empty", !(model.player.action > 0));
   refs.dotBonus.classList.toggle("empty",  !(model.player.bonus > 0));
 }

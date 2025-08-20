@@ -53,13 +53,16 @@ function cue(text){
 /* ------------------------ UI Sync ------------------------ */
 function syncUI(){
   const p = currentPlayer();
+  const hasInfernoActive = p.effects?.some(eff => eff.kind === "inferno_next") || false;
+  
   updateActionBar({
     inCombat: state.mode === "combat",
     player: {
       name: p.name, hp: p.hp, hpMax: p.hpMax,
       action: p.turn.action, bonus: p.turn.bonus,
       canBurn: hasSpell(p, "burn_dot") && p.turn.action > 0 && !isTargeting(),
-      canInferno: hasPassive(p, "inferno") && p.turn.bonus > 0 && !isTargeting(),
+      canInferno: hasPassive(p, "inferno") && p.turn.bonus > 0 && !isTargeting() && !hasInfernoActive,
+      hasInferno: hasInfernoActive,
     },
     boss: {
       name: state.boss?.name ?? "—",
@@ -166,6 +169,12 @@ function endTurnInternal(){
   }
   const p = currentPlayer();
   p.turn = { action: 1, bonus: 1, moved: 0 };
+  
+  // Clear any remaining turn-based effects
+  if (p.effects) {
+    p.effects = p.effects.filter(eff => eff.kind !== "inferno_next");
+  }
+  
   syncUI();
 }
 
