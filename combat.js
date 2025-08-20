@@ -1,7 +1,7 @@
 // /combat.js
 // Boss only acts in boss phase; manual end-turn gate; d3 Advance; Burn scales with POW mod.
 import { state } from "./state.js";
-import { spellsFor } from "./spells_registry.js";
+import { spellsFor, passivesFor } from "./spells_registry.js";
 import { mountActionBar, updateActionBar } from "./action_bar.js";
 import { renderBossPanel, syncBossPanel } from "./boss_panel.js";
 import { beginTargeting, cancelTargeting, isTargeting } from "./targeting.js";
@@ -19,6 +19,11 @@ function ensurePlayerVitals(p){
 function hasSpell(p, id){
   const list = spellsFor(p.classId, p.affinity, p.attrs);
   return list.some(s => s.id === id);
+}
+
+function hasPassive(p, id){
+  const list = passivesFor(p.classId, p.affinity, p.attrs);
+  return list.some(ps => ps.id === id);
 }
 
 function currentPlayer(){ return state.players[state.turnIdx % state.players.length]; }
@@ -54,6 +59,7 @@ function syncUI(){
       name: p.name, hp: p.hp, hpMax: p.hpMax,
       action: p.turn.action, bonus: p.turn.bonus,
       canBurn: hasSpell(p, "burn_dot") && p.turn.action > 0 && !isTargeting(),
+      canInferno: hasPassive(p, "inferno") && p.turn.bonus > 0 && !isTargeting(),
     },
     boss: {
       name: state.boss?.name ?? "—",
@@ -91,6 +97,20 @@ function targetAndCastBurn(){
   });
 }
 
+function castInferno(){
+  const p = currentPlayer();
+  if (!hasPassive(p, "inferno")) { cue(`${p.name} cannot use Inferno.`); return; }
+  if (p.turn.bonus <= 0) { cue(`${p.name} has no bonus actions left.`); return; }
+
+  // Apply Inferno effect - enhance next fire spell
+  if (!p.effects) p.effects = [];
+  p.effects.push({ kind: "inferno_next", remaining: 1 });
+  p.turn.bonus -= 1;
+  
+  cue(`${p.name} channels Inferno! Next fire spell will be enhanced.`);
+  syncUI();
+}
+
 function intersectsBoss(col,row){
   const b = state.boss; if (!b) return false;
   const w = b.w || 1, h = b.h || 2;
@@ -99,14 +119,39 @@ function intersectsBoss(col,row){
 }
 
 function applyBurnFrom(p){
+  // Check for Inferno enhancement
+  const infernoEffect = p.effects?.find(eff => eff.kind === "inferno_next");
+  const isInfernoEnhanced = !!infernoEffect;
+  
   // Immediate application damage (does not consume duration)
-  state.boss.hp = Math.max(0, (state.boss.hp ?? 0) - 1);
+  let baseDamage = 1;
+  if (isInfernoEnhanced) {
+    baseDamage = 3; // Enhanced by Inferno
+    cue(`Inferno enhancement: Burn deals extra damage!`);
+  }
+  
+  state.boss.hp = Math.max(0, (state.boss.hp ?? 0) - baseDamage);
   const pow = p.attrs?.POW ?? 8;
   const dur = Math.max(0, abilityMod(pow)); // duration = POW mod; countdown begins next boss turn
   const s = state.boss.statuses || (state.boss.statuses = []);
-  s.push({ kind: "burn", amount: 1, remaining: dur, source: p.name ?? p.id });
+  
+  let burnAmount = 1;
+  if (isInfernoEnhanced) {
+    burnAmount = 2; // Enhanced DoT amount
+  }
+  
+  s.push({ kind: "burn", amount: burnAmount, remaining: dur, source: p.name ?? p.id });
   syncBossPanel();
-  cue(`Boss takes 1 burn damage (application).`);
+  cue(`Boss takes ${baseDamage} burn damage (application).`);
+  
+  // Consume Inferno effect
+  if (isInfernoEnhanced) {
+    p.effects = p.effects.filter(eff => eff.kind !== "inferno_next");
+    cue(`Inferno effect consumed.`);
+    
+    // Inferno radiates damage to nearby enemies (and potentially allies)
+    cue(`Inferno radiates fire damage around ${p.name}!`);
+  }
 }
 
 /* ------------------------ Turn & Boss Phase ------------------------ */
@@ -273,7 +318,7 @@ function startCaveCombat(){
 
   mountActionBar({
     onBurn: targetAndCastBurn,
-    onInferno: () => {},
+    onInferno: castInferno,
     onEndTurn: manualEndTurn, // IMPORTANT: manual path only
   });
 

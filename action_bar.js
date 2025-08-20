@@ -56,7 +56,7 @@ export function updateActionBar(model){
   refs.playerHp.textContent = `${model.player.name} ${model.player.hp}/${model.player.hpMax}`;
   refs.bossHp.textContent = `${model.boss.name} ${model.boss.hp}/${model.boss.hpMax}`;
   refs.burnBtn.disabled = !model.player.canBurn;
-  refs.infernoBtn.disabled = true;
+  refs.infernoBtn.disabled = !model.player.canInferno;
 
   refs.dotAction.classList.toggle("empty", !(model.player.action > 0));
   refs.dotBonus.classList.toggle("empty",  !(model.player.bonus > 0));
