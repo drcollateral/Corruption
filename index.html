@@ -26,7 +26,8 @@
   <script>
     // Show a helpful overlay only when opened via file://
     (function(){
-      if (location.protocol === 'file:') {
+  const proto = location.protocol;
+  if (proto !== 'http:' && proto !== 'https:') {
         document.addEventListener('DOMContentLoaded', () => {
           const ov = document.getElementById('file-mode-overlay');
           if (ov) ov.style.display = 'grid';
@@ -65,6 +66,14 @@ http://127.0.0.1:5500/index.html</code></pre>
             <option value="4">4 players</option>
           </select>
         </div>
+        <!-- Debug options for development/testing -->
+        <fieldset class="cc-debug" style="margin-top:8px; border:1px dashed #6e6e78; padding:8px; border-radius:8px;">
+          <legend style="padding:0 6px; font-size:12px; color:#bbb;">Debug Options</legend>
+          <label style="display:flex; align-items:center; gap:8px; font-size:13px;">
+            <input type="checkbox" id="debug-skip-cave" />
+            Skip to cave combat after character creation
+          </label>
+        </fieldset>
         <div class="cc-actions">
           <button type="submit" class="primary">Continue</button>
         </div>
@@ -79,7 +88,7 @@ http://127.0.0.1:5500/index.html</code></pre>
       <form id="cc-form">
         <div class="cc-row">
           <label for="cc-name">Name</label>
-          <input id="cc-name" name="name" type="text" maxlength="24" placeholder="Adventurer" required />
+          <input id="cc-name" name="name" type="text" maxlength="24" placeholder="Adventurer" />
         </div>
         <div class="cc-row">
           <label for="cc-class">Class</label>
@@ -208,8 +217,16 @@ http://127.0.0.1:5500/index.html</code></pre>
     </div>
   </div>
 
-  <!-- Static module script (works over HTTP). If you open via file://, see overlay above. -->
-  <script type="module" src="./main.js?v=25"></script>
+  <!-- Modern Combat System - Professional Architecture -->
+  <script>
+    // Legacy path shim: prevent old dynamic import attempts by defining fallbacks.
+    // If some stale cached code tries to import now-moved files, we attach dummies.
+    window.__legacyShimApplied = true;
+  </script>
+  <script type="module" src="./src/ModernCombatBridge.js?v=22"></script>
+  
+  <!-- Main Game Entry Point -->
+  <script type="module" src="./src/main.js?v=22"></script>
 </body>
 </html>
 
