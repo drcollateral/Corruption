@@ -19,7 +19,8 @@ export const CUE_CONFIG = {
     className: "error-cue",
     priority: 100,
     category: "error",
-    description: "When player tries to act outside their turn"
+    description: "When player tries to act outside their turn",
+    enabled: true
   },
 
   "no-actions-left": {
@@ -29,7 +30,8 @@ export const CUE_CONFIG = {
     className: "error-cue", 
     priority: 100,
     category: "error",
-    description: "When player has no action points remaining"
+    description: "When player has no action points remaining",
+    enabled: true
   },
 
   "no-bonus-actions-left": {
@@ -39,7 +41,8 @@ export const CUE_CONFIG = {
     className: "error-cue",
     priority: 100,
     category: "error", 
-    description: "When player has no bonus action points remaining"
+    description: "When player has no bonus action points remaining",
+    enabled: true
   },
 
   "no-spell-available": {
@@ -49,7 +52,8 @@ export const CUE_CONFIG = {
     className: "error-cue",
     priority: 100, 
     category: "error",
-    description: "When player lacks required spells"
+    description: "When player lacks required spells",
+    enabled: true
   },
 
   "cannot-use-spell": {
@@ -59,7 +63,8 @@ export const CUE_CONFIG = {
     className: "error-cue",
     priority: 100,
     category: "error",
-    description: "When player tries to use unavailable spell"
+    description: "When player tries to use unavailable spell",
+    enabled: true
   },
 
   "already-moved": {
@@ -69,7 +74,8 @@ export const CUE_CONFIG = {
     className: "error-cue",
     priority: 100,
     category: "error", 
-    description: "When player tries to move twice in one turn"
+    description: "When player tries to move twice in one turn",
+    enabled: true
   },
 
   "spell-already-primed": {
@@ -79,7 +85,8 @@ export const CUE_CONFIG = {
     className: "error-cue",
     priority: 100,
     category: "error",
-    description: "When trying to prime Inferno when already primed"
+    description: "When trying to prime Inferno when already primed",
+    enabled: true
   },
 
   // === QUICK FEEDBACK ===
@@ -90,7 +97,8 @@ export const CUE_CONFIG = {
     className: "feedback-cue",
     priority: 50,
     category: "feedback",
-    description: "When player cancels targeting mode"
+    description: "When player cancels targeting mode",
+    enabled: true
   },
 
   "movement-cancelled": {
@@ -100,7 +108,8 @@ export const CUE_CONFIG = {
     className: "feedback-cue", 
     priority: 50,
     category: "feedback",
-    description: "When player cancels movement selection"
+    description: "When player cancels movement selection",
+    enabled: true
   },
 
   // === SPELL CASTING ===
@@ -111,7 +120,8 @@ export const CUE_CONFIG = {
     className: "spell-cue",
     priority: 75,
     category: "combat",
-    description: "When player successfully casts a spell"
+    description: "When player successfully casts a spell",
+    enabled: true
   },
 
   "inferno-primed": {
@@ -121,10 +131,22 @@ export const CUE_CONFIG = {
     className: "buff-cue enhanced",
     priority: 75,
     category: "combat",
-    description: "When Inferno is successfully primed"
+    description: "When Inferno is successfully primed",
+    enabled: true
   },
 
   // === MOVEMENT ===
+  "movement-roll": {
+    message: "Movement rolled: d{sides} = {result}.",
+    duration: 1200,
+    sticky: false,
+    className: "movement-roll-cue",
+    priority: 60,
+    category: "movement",
+    description: "Movement die roll results",
+    enabled: true  // Disabled as "overkill" noise
+  },
+
   "movement-prompt": {
     message: "Movement: rolled d{dieSize} = {steps}. Click a highlighted tile to move.",
     duration: 0,          // Persistent until movement completes
@@ -132,7 +154,8 @@ export const CUE_CONFIG = {
     className: "movement-prompt",
     priority: 60,
     category: "movement", 
-    description: "Shows available movement and prompts for selection"
+    description: "Shows available movement and prompts for selection",
+    enabled: true
   },
 
   "movement-complete": {
@@ -142,7 +165,8 @@ export const CUE_CONFIG = {
     className: "movement-cue",
     priority: 60,
     category: "movement",
-    description: "Confirms movement completion"
+    description: "Confirms movement completion",
+    enabled: true
   },
 
   "movement-penalty": {
@@ -152,7 +176,8 @@ export const CUE_CONFIG = {
     className: "warning-cue",
     priority: 70,
     category: "movement", 
-    description: "When movement is reduced by penalties"
+    description: "When movement is reduced by penalties",
+    enabled: true
   },
 
   // === BOSS ACTIONS ===
@@ -163,7 +188,17 @@ export const CUE_CONFIG = {
     className: "boss-turn-cue",
     priority: 90,
     category: "boss",
-    description: "When boss turn begins"
+    description: "When boss turn begins",
+    enabled: true
+  },
+
+  "boss-dot-damage": {
+    message: "{bossName} takes {amount} {sourceType} damage.",
+    behavior: "click-to-continue",
+    className: "combat-cue dot-damage",
+    enabled: true,
+    category: "combat",
+    description: "Boss damage-over-time tick notification"
   },
 
   "boss-burn-damage": {
@@ -173,7 +208,8 @@ export const CUE_CONFIG = {
     className: "boss-burn-cue",
     priority: 85,
     category: "boss",
-    description: "Processing boss burn damage"
+    description: "Processing boss burn damage",
+    enabled: true
   },
 
   "boss-draw-resolve": {
@@ -183,7 +219,8 @@ export const CUE_CONFIG = {
     className: "boss-draw-resolve-cue",
     priority: 90,
     category: "boss",
-    description: "Boss card draw and resolution phase"
+    description: "Boss card draw and resolution phase",
+    enabled: true
   },
 
   "boss-draw": {
@@ -193,7 +230,17 @@ export const CUE_CONFIG = {
     className: "boss-card-cue",
     priority: 90,
     category: "boss",
-    description: "When boss draws cards"
+    description: "When boss draws cards",
+    enabled: true
+  },
+
+  "boss-action-display": {
+    message: "Boss uses: {actionName}",
+    behavior: "boss-draw",
+    className: "boss-action-cue",
+    enabled: true,
+    category: "boss",
+    description: "Display boss action selection"
   },
 
   "boss-attack": {
@@ -203,7 +250,8 @@ export const CUE_CONFIG = {
     className: "boss-attack-cue", 
     priority: 85,
     category: "boss",
-    description: "Boss attack announcements"
+    description: "Boss attack announcements",
+    enabled: true
   },
 
   "boss-miss": {
@@ -213,7 +261,173 @@ export const CUE_CONFIG = {
     className: "boss-miss-cue",
     priority: 80,
     category: "boss", 
-    description: "When boss attacks miss"
+    description: "When boss attacks miss",
+    enabled: true
+  },
+
+  "boss-roar": {
+    message: "Terrifying Roar!",
+    duration: 0,
+    sticky: true,
+    className: "boss-roar-cue",
+    priority: 85,
+    category: "boss",
+    description: "Boss roar attack",
+    enabled: true
+  },
+
+  "boss-enraged": {
+    message: "Boss becomes Enraged!",
+    duration: 0,
+    sticky: true,
+    className: "boss-enrage-cue",
+    priority: 85,
+    category: "boss",
+    description: "Boss enrage state activation",
+    enabled: true
+  },
+
+  "boss-enrage-fizzle": {
+    message: "Enrage fizzles!",
+    duration: 1500,
+    sticky: false,
+    className: "boss-fizzle-cue",
+    priority: 80,
+    category: "boss",
+    description: "When enrage fails due to movement",
+    enabled: true
+  },
+
+  "boss-charge-connect": {
+    message: "Charge connects!",
+    duration: 0,
+    sticky: true,
+    className: "boss-charge-cue",
+    priority: 85,
+    category: "boss",
+    description: "Successful charge attack",
+    enabled: true
+  },
+
+  "boss-charge-fail": {
+    message: "Charge fails!",
+    duration: 0,
+    sticky: true,
+    className: "boss-charge-cue",
+    priority: 80,
+    category: "boss",
+    description: "Failed charge attack",
+    enabled: true
+  },
+
+  "movement-penalty-applied": {
+    message: "Movement penalty applied!",
+    duration: 1500,
+    sticky: false,
+    className: "movement-penalty-cue",
+    priority: 70,
+    category: "movement",
+    description: "When movement penalties are applied to players",
+    enabled: true
+  },
+
+  "movement-cancelled": {
+    message: "Movement cancelled (roll preserved).",
+    duration: 0,
+    sticky: true,
+    className: "movement-cancel-cue",
+    priority: 60,
+    category: "movement",
+    description: "When player cancels movement",
+    enabled: true
+  },
+
+  "unknown-boss-action": {
+    message: "Unknown boss action: {actionId}",
+    duration: 0,
+    sticky: true,
+    className: "error-cue",
+    priority: 100,
+    category: "error",
+    description: "When boss draws unrecognized action",
+    enabled: true
+  },
+
+  "boss-roar": {
+    message: "Terrifying Roar!",
+    duration: 0,
+    sticky: true,
+    className: "boss-card-cue",
+    priority: 90,
+    category: "boss",
+    description: "Boss Roar ability activation",
+    enabled: true
+  },
+
+  "boss-enrage": {
+    message: "Boss becomes Enraged!",
+    duration: 0,
+    sticky: true,
+    className: "boss-card-cue",
+    priority: 90,
+    category: "boss",
+    description: "Boss Enrage ability activation",
+    enabled: true
+  },
+
+  "boss-enrage-fizzle": {
+    message: "Enrage fizzles!",
+    duration: 0,
+    sticky: true,
+    className: "boss-card-cue",
+    priority: 90,
+    category: "boss",
+    description: "Boss Enrage fails due to movement",
+    enabled: true
+  },
+
+  "movement-penalty-applied": {
+    message: "Movement penalty applied!",
+    duration: 0,
+    sticky: true,
+    className: "boss-card-cue",
+    priority: 85,
+    category: "boss",
+    description: "Roar movement penalty confirmation",
+    enabled: true
+  },
+
+  "boss-charge-attack": {
+    message: "Charge attack!",
+    duration: 0,
+    sticky: true,
+    className: "boss-card-cue",
+    priority: 90,
+    category: "boss",
+    description: "Boss Charge attack initiation",
+    enabled: true
+  },
+
+  "boss-charge-connects": {
+    message: "Charge connects!",
+    duration: 0,
+    sticky: true,
+    className: "boss-card-cue",
+    priority: 90,
+    category: "boss",
+    description: "Boss Charge attack hits target",
+    enabled: true
+  },
+
+  "boss-charge-fails": {
+    message: "Charge fails!",
+    duration: 0,
+    sticky: true,
+    className: "boss-card-cue",
+    priority: 90,
+    category: "boss",
+    description: "Boss Charge attack misses",
+    enabled: true
   },
 
   // === TURN MANAGEMENT ===
@@ -224,7 +438,30 @@ export const CUE_CONFIG = {
     className: "initiative-header-cue",
     priority: 95,
     category: "initiative",
-    description: "Initiative phase header"
+    description: "Initiative phase header",
+    enabled: true
+  },
+
+  "initiative-roll": {
+    message: "Rolling for initiative…",
+    duration: 1500,
+    sticky: false,
+    className: "initiative-roll-cue",
+    priority: 95,
+    category: "initiative",
+    description: "Initiative roll starting message",
+    enabled: true
+  },
+
+  "initiative-roll-result": {
+    message: "{entityName} rolls d{sides}… {result}!",
+    duration: 1500,
+    sticky: false,
+    className: "initiative-result-cue",
+    priority: 95,
+    category: "initiative",
+    description: "Individual initiative roll results",
+    enabled: true
   },
 
   "initiative-rolling": {
@@ -234,7 +471,8 @@ export const CUE_CONFIG = {
     className: "initiative-rolling-cue",
     priority: 95,
     category: "initiative", 
-    description: "When entity is rolling initiative"
+    description: "When entity is rolling initiative",
+    enabled: true
   },
 
   "initiative-result": {
@@ -244,7 +482,8 @@ export const CUE_CONFIG = {
     className: "initiative-result-cue",
     priority: 95,
     category: "initiative",
-    description: "Initiative roll result announcement"
+    description: "Initiative roll result announcement",
+    enabled: true
   },
 
   "turn-order-resolve": {
@@ -254,7 +493,8 @@ export const CUE_CONFIG = {
     className: "turn-order-cue",
     priority: 95,
     category: "initiative",
-    description: "Turn order determination"
+    description: "Turn order determination",
+    enabled: true
   },
 
   "turn-order-display": {
@@ -264,7 +504,8 @@ export const CUE_CONFIG = {
     className: "turn-order-display-cue",
     priority: 95,
     category: "initiative",
-    description: "Display final turn order"
+    description: "Display final turn order",
+    enabled: true
   },
 
   "turn-start": {
@@ -274,7 +515,8 @@ export const CUE_CONFIG = {
     className: "turn-cue",
     priority: 95,
     category: "turns",
-    description: "Turn beginning announcements"
+    description: "Turn beginning announcements",
+    enabled: true
   },
 
   "turn-end": {
@@ -284,7 +526,8 @@ export const CUE_CONFIG = {
     className: "turn-end-cue",
     priority: 80,
     category: "turns",
-    description: "Turn ending announcements"
+    description: "Turn ending announcements",
+    enabled: true
   },
 
   "automatic-turn-end": {
@@ -294,7 +537,8 @@ export const CUE_CONFIG = {
     className: "auto-end-cue",
     priority: 75,
     category: "turns",
-    description: "When entity runs out of actions"
+    description: "When entity runs out of actions",
+    enabled: true
   },
 
   "auto-end-turn-ignored": {
@@ -304,7 +548,8 @@ export const CUE_CONFIG = {
     className: "debug-cue",
     priority: 20,
     category: "debug",
-    description: "Debug message for ignored auto end-turn"
+    description: "Debug message for ignored auto end-turn",
+    enabled: true
   },
 
   // === BOSS CARDS & ACTIONS ===
@@ -315,7 +560,8 @@ export const CUE_CONFIG = {
     className: "boss-cards-cue",
     priority: 85,
     category: "boss",
-    description: "Boss card draw phase"
+    description: "Boss card draw phase",
+    enabled: true
   },
 
   "boss-cards-resolved": {
@@ -325,7 +571,8 @@ export const CUE_CONFIG = {
     className: "boss-cards-done-cue",
     priority: 80,
     category: "boss",
-    description: "Boss card resolution complete"
+    description: "Boss card resolution complete",
+    enabled: true
   },
 
   "boss-card-played": {
@@ -335,7 +582,8 @@ export const CUE_CONFIG = {
     className: "boss-card-cue",
     priority: 85,
     category: "boss",
-    description: "Individual boss card played"
+    description: "Individual boss card played",
+    enabled: true
   },
 
   "boss-buff-applied": {
@@ -345,7 +593,8 @@ export const CUE_CONFIG = {
     className: "boss-buff-cue",
     priority: 75,
     category: "boss",
-    description: "Boss receives buff effect"
+    description: "Boss receives buff effect",
+    enabled: true
   },
 
   // === PROCESS EFFECTS ===
@@ -356,7 +605,8 @@ export const CUE_CONFIG = {
     className: "process-burn-cue",
     priority: 75,
     category: "effects",
-    description: "Burn damage processing phase"
+    description: "Burn damage processing phase",
+    enabled: true
   },
 
   "process-dots": {
@@ -366,7 +616,8 @@ export const CUE_CONFIG = {
     className: "process-dots-cue",
     priority: 75,
     category: "effects",
-    description: "DOT effects processing"
+    description: "DOT effects processing",
+    enabled: true
   },
 
   // === DEVELOPMENT MESSAGES ===
@@ -377,7 +628,8 @@ export const CUE_CONFIG = {
     className: "dev-warning-cue",
     priority: 60,
     category: "development",
-    description: "When action functionality is missing"
+    description: "When action functionality is missing",
+    enabled: true
   },
 
   "bonus-not-implemented": {
@@ -387,7 +639,8 @@ export const CUE_CONFIG = {
     className: "dev-warning-cue",
     priority: 60,
     category: "development",
-    description: "When bonus functionality is missing"
+    description: "When bonus functionality is missing",
+    enabled: true
   },
 
   "feature-placeholder": {
@@ -397,7 +650,8 @@ export const CUE_CONFIG = {
     className: "dev-placeholder-cue",
     priority: 50,
     category: "development",
-    description: "Generic development placeholder"
+    description: "Generic development placeholder",
+    enabled: true
   },
 
   // === COMBAT FLOW ===
@@ -408,7 +662,8 @@ export const CUE_CONFIG = {
     className: "combat-victory-cue",
     priority: 100,
     category: "combat",
-    description: "Combat completion message"
+    description: "Combat completion message",
+    enabled: true
   },
 
   "round-transition": {
@@ -418,7 +673,8 @@ export const CUE_CONFIG = {
     className: "round-transition-cue",
     priority: 90,
     category: "rounds",
-    description: "Between round transition"
+    description: "Between round transition",
+    enabled: true
   },
 
   "game-over": {
@@ -428,25 +684,30 @@ export const CUE_CONFIG = {
     className: "game-over-cue",
     priority: 100,
     category: "combat",
-    description: "Defeat message"
+    description: "Defeat message",
+    enabled: true
   },
+
+  "turn-end": {
     message: "{entityName}'s turn ends.",
     duration: 0, 
     sticky: true,
     className: "turn-cue",
     priority: 95,
     category: "turns",
-    description: "Turn ending announcements"
+    description: "Turn ending announcements",
+    enabled: true
   },
 
   "combat-start": {
-    message: "Combat started. Round {roundNumber}.",
+    message: "Combat started. Round 1.",
     duration: 0,
     sticky: true,
     className: "combat-start-cue",
     priority: 100,
     category: "combat",
-    description: "Combat initialization messages"
+    description: "Combat initialization messages",
+    enabled: true
   },
 
   "cycle": {
@@ -456,7 +717,8 @@ export const CUE_CONFIG = {
     className: "cycle-cue",
     priority: 95,
     category: "turns",
-    description: "End of turn cycle"
+    description: "End of turn cycle",
+    enabled: true
   },
 
   "advance": {
@@ -466,7 +728,8 @@ export const CUE_CONFIG = {
     className: "advance-cue", 
     priority: 95,
     category: "turns",
-    description: "Boss deck advancement"
+    description: "Boss deck advancement",
+    enabled: true
   },
 
   // === DAMAGE & EFFECTS ===
@@ -477,7 +740,8 @@ export const CUE_CONFIG = {
     className: "inferno-pulse-cue",
     priority: 80,
     category: "effects",
-    description: "When Inferno pulses damage"
+    description: "When Inferno pulses damage",
+    enabled: true
   },
 
   "inferno-detonate": {
@@ -487,7 +751,8 @@ export const CUE_CONFIG = {
     className: "inferno-detonate-cue",
     priority: 80,
     category: "effects",
-    description: "When Inferno detonates existing burn"
+    description: "When Inferno detonates existing burn",
+    enabled: true
   },
 
   "inferno-detonate-no-burn": {
@@ -497,7 +762,8 @@ export const CUE_CONFIG = {
     className: "inferno-miss-cue",
     priority: 70,
     category: "effects",
-    description: "When Inferno tries to detonate but no burn exists"
+    description: "When Inferno tries to detonate but no burn exists",
+    enabled: true
   },
 
   "boss-burning": {
@@ -507,7 +773,8 @@ export const CUE_CONFIG = {
     className: "boss-burn-cue",
     priority: 75,
     category: "effects",
-    description: "Boss burning status display"
+    description: "Boss burning status display",
+    enabled: true
   },
 
   "damage-dealt": {
@@ -517,7 +784,8 @@ export const CUE_CONFIG = {
     className: "damage-cue",
     priority: 70,
     category: "damage",
-    description: "Damage number displays"
+    description: "Damage number displays",
+    enabled: true
   },
 
   "burn-applied": {
@@ -527,7 +795,8 @@ export const CUE_CONFIG = {
     className: "burn-cue",
     priority: 70, 
     category: "effects",
-    description: "When burn effect is applied"
+    description: "When burn effect is applied",
+    enabled: true
   },
 
   "burn-pulse": {
@@ -537,7 +806,8 @@ export const CUE_CONFIG = {
     className: "burn-pulse-cue",
     priority: 70,
     category: "effects", 
-    description: "When burn effect deals damage"
+    description: "When burn effect deals damage",
+    enabled: true
   },
 
   // === ROUND & GAME STATE ===
@@ -548,7 +818,8 @@ export const CUE_CONFIG = {
     className: "round-cue",
     priority: 95,
     category: "rounds",
-    description: "New round announcement"
+    description: "New round announcement",
+    enabled: true
   },
 
   "auto-end-turn-ignored": {
@@ -558,7 +829,8 @@ export const CUE_CONFIG = {
     className: "debug-cue",
     priority: 20,
     category: "debug",
-    description: "Debug message for ignored auto end-turn"
+    description: "Debug message for ignored auto end-turn",
+    enabled: true
   },
 
   // === DEVELOPMENT ===
@@ -569,7 +841,8 @@ export const CUE_CONFIG = {
     className: "dev-cue warning",
     priority: 110,
     category: "dev",
-    description: "Action buttons not yet implemented"
+    description: "Action buttons not yet implemented",
+    enabled: true
   },
 
   "bonus-not-implemented": {
@@ -579,7 +852,8 @@ export const CUE_CONFIG = {
     className: "dev-cue warning",
     priority: 110,
     category: "dev",
-    description: "Bonus buttons not yet implemented"
+    description: "Bonus buttons not yet implemented",
+    enabled: true
   },
 
   "not-implemented": {
@@ -589,7 +863,8 @@ export const CUE_CONFIG = {
     className: "dev-cue warning",
     priority: 110,
     category: "dev",
-    description: "Features not yet implemented"
+    description: "Features not yet implemented",
+    enabled: true
   },
 
   // === PARTY & SETUP ===
@@ -600,7 +875,8 @@ export const CUE_CONFIG = {
     className: "setup-cue",
     priority: 50,
     category: "setup",
-    description: "When party size is chosen"
+    description: "When party size is chosen",
+    enabled: true
   },
 
   "entering-cave": {
@@ -610,7 +886,8 @@ export const CUE_CONFIG = {
     className: "debug-cue",
     priority: 30,
     category: "debug",
-    description: "Debug message for cave entry"
+    description: "Debug message for cave entry",
+    enabled: true
   },
 
   // === DEFAULT FALLBACK ===
@@ -621,7 +898,8 @@ export const CUE_CONFIG = {
     className: "cue-item",
     priority: 40,
     category: "general",
-    description: "Generic messages that don't match other categories"
+    description: "Generic messages that don't match other categories",
+    enabled: true
   }
 };
 
@@ -714,3 +992,5 @@ export function getCueCategories() {
   }
   return Array.from(categories).sort();
 }
+
+

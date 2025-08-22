@@ -40,6 +40,38 @@
 
 // Note: This file is self-contained and doesn't need external imports
 
+// ===== Logging utilities =====
+function isCueLoggingEnabled() {
+  try {
+    // Check debug checkbox for cue logging
+    const debugCheckbox = document.getElementById('debugCues');
+    return debugCheckbox ? debugCheckbox.checked : false;
+  } catch {
+    return false;
+  }
+}
+
+let lastLoggedCue = '';
+let lastLogTime = 0;
+
+function logCueToConsole(text, category = 'general', key = 'unknown') {
+  if (!isCueLoggingEnabled()) return;
+  
+  const now = Date.now();
+  const timestamp = new Date(now).toLocaleTimeString();
+  const cueKey = `${category}.${key}`;
+  
+  // Prevent spam by checking if this is the same cue as last time
+  if (lastLoggedCue !== cueKey || (now - lastLogTime) > 1000) {
+    const categoryIcon = category === 'boss-actions' ? '👹' : 
+                        category === 'combat-actions' ? '⚔️' : '🎯';
+    console.log(`${categoryIcon} [${timestamp}] ${cueKey} | ⏱️ CUESERVICE DIRECT`);
+    console.log(`   Text: "${text}"`);
+    lastLoggedCue = cueKey;
+    lastLogTime = now;
+  }
+}
+
 // ===== Helper DOM utilities (migrated from legacy cues.js) =====
 const CUE_STACK_ID = 'cue-stack';
 export function ensureCueStack(){
@@ -275,6 +307,11 @@ class CueService {
   
   // Sticky cues: Remain visible until manually dismissed by click
   sticky(text, opts = {}) {
+    // Log the cue
+    const category = opts.category || 'general';
+    const key = opts.key || 'sticky-cue';
+    logCueToConsole(text, category, key);
+    
     return this.show(text, { 
       ...opts, 
       sticky: true, 
@@ -286,6 +323,11 @@ class CueService {
   
   // Click-to-continue cues: Wait for user interaction then disappear
   clickToContinue(text, opts = {}) {
+    // Log the cue
+    const category = opts.category || 'general';
+    const key = opts.key || 'click-to-continue';
+    logCueToConsole(text, category, key);
+    
     return this.show(text, { 
       ...opts, 
       sticky: false, 
@@ -297,6 +339,11 @@ class CueService {
   
   // Info cues: Persistent status displays that can be replaced
   info(text, opts = {}) {
+    // Log the cue
+    const category = opts.category || 'general';
+    const key = opts.key || 'info';
+    logCueToConsole(text, category, key);
+    
     return this.show(text, { 
       ...opts, 
       sticky: true,
@@ -308,6 +355,14 @@ class CueService {
   
   // Announcement sequences: Auto-advancing action descriptions
   announce(messages, opts = {}) {
+    // Log the cue(s)
+    const category = opts.category || 'general';
+    const key = opts.key || 'announcement';
+    const messageArray = Array.isArray(messages) ? messages : [messages];
+    messageArray.forEach((msg, i) => {
+      logCueToConsole(msg, category, `${key}-${i}`);
+    });
+    
     // If duration is specified, use timed announcement
     if (opts.duration) {
       return this.timedAnnouncement(messages, opts);
