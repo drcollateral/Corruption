@@ -16,6 +16,34 @@ body{display:flex;flex-direction:column;height:100vh;background:var(--bg-dark);c
 #ab-tooltip{position:fixed; z-index:3000; pointer-events:none; background:#111; color:#e6e6eb; padding:6px 10px; border:1px solid #444; border-radius:8px; font-size:12px; line-height:1.2; opacity:0; transform:translateY(-4px); transition:opacity .12s ease, transform .12s ease; max-width:260px; box-shadow:0 4px 18px #000c, 0 0 0 1px #222 inset;}
 #ab-tooltip.visible{opacity:1; transform:translateY(0);}
 
+/* Boss deck probability tracker */
+.deck-tracker{display:grid; gap:6px; font-size:12px;}
+.deck-tracker .deck-header{display:flex; justify-content:space-between; align-items:center; font-size:11px; opacity:.85; margin-bottom:2px;}
+.deck-tracker .reshuffle-note{color:var(--warn); font-weight:600;}
+.deck-rows{display:grid; gap:4px;}
+.deck-row{display:grid; grid-template-columns:1fr auto 60px; gap:8px; align-items:center; padding:4px 8px; border:1px solid var(--line-dim); border-radius:6px; background:#0d0d10;}
+.deck-row .deck-name{font-weight:600; font-size:12px;}
+.deck-row .deck-meta small{opacity:.7;}
+.deck-row .deck-odds{justify-self:end; font-weight:600; font-size:12px; padding:2px 6px; border-radius:4px; background:#1a1a1f;}
+.deck-row .deck-odds.prob-high{color:#e74c3c; background:#3d1814;}
+.deck-row .deck-odds.prob-medium{color:#f39c12; background:#3a2a10;}
+.deck-row .deck-odds.prob-low{color:#7f8c8d; background:#1e2627;}
+
+/* Enhanced burn (Inferno-primed) visual */
+button.enhanced{position:relative;}
+button.enhanced::after{content:""; position:absolute; inset:0; border-radius:inherit; box-shadow:0 0 12px 2px #ff6b6b55, 0 0 0 1px #ff6b6b44 inset; pointer-events:none; animation:pulse-fire 2s ease-in-out infinite;}
+@keyframes pulse-fire { 0%,100%{opacity:.9; filter:hue-rotate(0);} 50%{opacity:.6; filter:hue-rotate(20deg);} }
+
+/* Enhanced action tooltip (Shift-expand) */
+#action-tooltip.action-tooltip{position:fixed; z-index:5000; background:rgba(20,20,24,.95); color:#fff; padding:10px 14px; border-radius:8px; max-width:320px; pointer-events:none; border:1px solid #333; box-shadow:0 8px 28px #000d, 0 0 0 1px #000 inset; font-size:12px; line-height:1.35; backdrop-filter:blur(6px); transition:opacity .15s ease, transform .15s ease;}
+#action-tooltip.hidden{opacity:0; visibility:hidden;}
+.tooltip-title{font-weight:600; font-size:13px; margin-bottom:4px; color:#ffd479; text-shadow:0 0 4px #ffda7a44;}
+.tooltip-line{margin:2px 0; opacity:.92;}
+.tooltip-bullet{padding-left:10px; position:relative; font-size:12px; opacity:.88;}
+.tooltip-bullet::before{content:'•'; position:absolute; left:0; opacity:.9; color:#ffb347;}
+.tooltip-spacer{height:6px;}
+.tooltip-hint{margin-top:8px; font-size:11px; opacity:.6; text-align:center; border-top:1px solid #ffffff1a; padding-top:6px; font-style:italic;}
+
 /* ---------- Modals / Cards ---------- */
 .modal{position:fixed; inset:0; z-index:1000; display:grid; place-items:center; background:rgba(0,0,0,.45)}
 .modal[hidden]{display:none}
@@ -94,7 +122,18 @@ button.primary:hover, .ghost:hover{filter:brightness(1.1)}
 
 /* ---------- Cue stack (vertical, non-overlapping) ---------- */
 #cue-stack{position:fixed; left:50%; top:12%; transform:translateX(-50%); display:grid; gap:8px; z-index:1200}
-.cue-item{background:#0d0d10; border:1px solid var(--accent); padding:8px 12px; border-radius:10px; box-shadow:0 0 0 2px #3a8cff22, 0 8px 24px #000a; animation:none}
+.cue-item{background:#0d0d10; border:1px solid var(--accent); color:#cfe2ff; padding:8px 12px; border-radius:10px; box-shadow:0 0 0 2px #3a8cff22, 0 8px 24px #000a; animation:none}
+
+/* Timed announcement cue - inherits base cue styling */
+.cue-item.timed-announcement-cue,
+.timed-announcement-cue {
+  background:#0d0d10; 
+  border:1px solid var(--accent); 
+  color:#cfe2ff; 
+  padding:8px 12px; 
+  border-radius:10px; 
+  box-shadow:0 0 0 2px #3a8cff22, 0 8px 24px #000a;
+}
 
 /* Red damage cue variant */
 .cue-item.damage-cue{
@@ -280,6 +319,24 @@ button.primary:hover, .ghost:hover{filter:brightness(1.1)}
   text-align: center;
   font-weight: bold;
   text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+}
+
+/* Initiative cues - turn order rolls, purple/blue theme */
+.cue-item.initiative-cue {
+  background: #0d0d1a; 
+  border-color: #6c5ce7; 
+  color: #e3d7ff;
+  box-shadow: 0 0 0 2px #6c5ce722, 0 8px 24px #000a;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  font-weight: 500;
+}
+
+.cue-item.initiative-cue:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 2px #6c5ce744, 0 10px 30px #000c;
+  border-color: #7b69ec;
 }
 
 /* Modern Message System Styles */
