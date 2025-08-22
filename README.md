@@ -25,16 +25,27 @@ Navigate to: http://localhost:8000/
 ## Project Structure (select)
 ```
 src/
-	game/CombatManager.js    Core combat flow (turns, movement, spells)
+	game/CombatManager.js     Core combat flow (turns, movement, spells)
 	systems/TargetingSystem.js Range highlighting & distance metrics
 	systems/BuffSystem.js     Buff/priming framework (inferno_primed, inferno)
 	entities/BossEntity.js    Boss statuses & burn stack handling
 	systems/EffectSystem.js   Visual / timing effects (Inferno ring, burn ticks)
 	ui/                       Action bar, panels, setup flow
+	data/BossRegistry.js      Boss deck definitions & metadata
+	factories/BossCreator.js  Modular boss creation system
+	utils/BossUtils.js        Boss management utilities
 	data/                     Static definitions (Classes, Sprites, Config, Spells)
 ```
 
 ## Key Mechanics
+### Boss System
+Modular boss creation using a Registry → Factory → Creation pattern:
+- **BossRegistry**: Centralized boss definitions (deck cards + metadata)
+- **BossCreator**: Factory for creating boss entities with validation
+- **BossUtils**: Utilities for spawning and managing bosses
+
+Each boss defines a deck of cards that determine their abilities during combat. Cards are drawn randomly each turn, making boss behavior varied but predictable within defined parameters.
+
 ### Movement & Range
 Diagonal costs alternate 1,2,… (aggregated from D&D 3.5 5/10). Pathfinding uses cost‑aware frontier search (Dijkstra-lite). Targeting uses a matching approximation (dnd35 metric) so displayed in‑range tiles align with feasible movement math.
 
@@ -50,6 +61,49 @@ Bonus action: primes (adds inferno_primed buff). Next Burn instead of adding a s
 2. Implement cast logic in `CombatManager.js` (similar to Burn) or a dedicated module
 3. Extend targeting if new AoE/shape (edit `TargetingSystem.js`)
 4. Add visual effect in `EffectSystem.js` (optional)
+
+### New Boss
+The modular boss system makes adding new bosses straightforward:
+
+1. **Define boss deck in `data/BossRegistry.js`:**
+   ```javascript
+   WOLF: [
+     { id: "howl", name: "Howl", desc: "Summons pack", count: 3 },
+     { id: "bite", name: "Bite", desc: "Vicious attack", count: 4 },
+     { id: "pack_leader", name: "Pack Leader", desc: "Buff allies", count: 1 }
+   ]
+   ```
+
+2. **Add boss metadata in `BOSS_METADATA`:**
+   ```javascript
+   WOLF: {
+     id: "WOLF",
+     name: "Alpha Wolf", 
+     type: "beast",
+     hp: 25,
+     movementDie: "d4",
+     size: { w: 1, h: 1 }
+   }
+   ```
+
+3. **Implement card logic in `CombatManager.js`:**
+   ```javascript
+   case 'howl': {
+     // Summon pack logic
+     break;
+   }
+   case 'bite': {
+     // Attack logic
+     break;
+   }
+   ```
+
+4. **Use the boss anywhere:**
+   ```javascript
+   const wolf = BossCreator.createBoss('WOLF', { col: 5, row: 5, rng: myRng });
+   ```
+
+The system automatically handles deck creation, validation, and UI integration.
 
 ### New Boss Ability
 1. Add patterns / AI hook inside `BossEntity` or observers in `BossObservers.js`
@@ -79,4 +133,4 @@ Open a PR: keep patches focused, include concise description + rationale. Avoid 
 TBD.
 
 ---
-Last major update: Burn stacking + Inferno toggle + movement parity (Aug 2025).
+Last major update: Modular boss system + Burn stacking + Inferno toggle + movement parity (Aug 2025).
