@@ -6,6 +6,7 @@ import { enterCave } from "./Cave.js";                 // ⬅ bossTurn removed
 import { renderParty } from "../ui/PartyPanel.js";
 import { renderCharacterSheet } from "../ui/CharacterSheet.js";
 import { updatePlayerSpriteDirection } from "../data/PlayerSprites.js";
+import { simpleCue } from "../utils/SimpleCue.js";
 
 let moveKeyHandler = null;
 
@@ -25,7 +26,13 @@ export function wireControls(){
 
     // check entrance (allowed to share cell)
     for (const e of state.entrances){
-      if (nc===e.col && nr===e.row && e.sceneTarget==="cave"){ enterCave(); }
+      if (nc===e.col && nr===e.row && e.sceneTarget==="cave"){ 
+        try {
+          enterCave(); 
+        } catch (error) {
+          console.error('Failed to enter cave:', error);
+        }
+      }
     }
     renderCharacterSheet();
   }
@@ -48,7 +55,7 @@ export function wireControls(){
         contextText.textContent = `Movement: ${state.pendingSteps} step(s) remaining.`;
       }
       if (state.pendingSteps <= 0){
-        // stop listening for this roll’s movement
+        // stop listening for this roll's movement
         window.removeEventListener("keydown", moveKeyHandler, true);
         moveKeyHandler = null;
 
@@ -87,7 +94,8 @@ export function wireControls(){
       const roll = state.rng.int(1, die);
       state.pendingSteps = roll;
       state.rolledThisTurn = true;
-      document.getElementById("context-text").textContent = `Rolled d${die}: ${roll}. Use WASD to move.`;
+      simpleCue(`Movement rolled: d${die} = ${roll}.`);
+      document.getElementById("context-text").textContent = `Use WASD to move.`;
       startMovementTurn();
     }
   });

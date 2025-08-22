@@ -3,6 +3,15 @@
  * Supports different targeting modes and validation
  */
 
+import { state } from '../core/GameState.js';
+
+// Debug logging helper - only log if combat logging is enabled
+function debugLog(...args) {
+  if (state?.debug?.logCombat) {
+    console.log(...args);
+  }
+}
+
 export class TargetingSystem {
   constructor(eventBus) {
     this.eventBus = eventBus;
@@ -237,8 +246,8 @@ export function beginTargeting(ts, caster, action, opts){ return ts?.beginTarget
 export function cancelTargeting(ts){ return ts?.cancelTargeting(); }
 // Direct DOM targeting for simple spell/movement targeting
 export function beginSimpleTargeting({ range, origin, canTarget, onSelect, onCancel, onInvalidTarget, highlightClass = 'highlight-target', distanceMetric = 'chebyshev' }) {
-  console.log('beginSimpleTargeting called with:', { range, origin, canTarget: !!canTarget, highlightClass });
-  console.log('All tiles on page:', document.querySelectorAll('.tile').length);
+  debugLog('beginSimpleTargeting called with:', { range, origin, canTarget: !!canTarget, highlightClass });
+  debugLog('All tiles on page:', document.querySelectorAll('.tile').length);
   
   if (!origin) {
     console.error('No origin provided for targeting');
@@ -247,7 +256,7 @@ export function beginSimpleTargeting({ range, origin, canTarget, onSelect, onCan
 
   // Clear any existing highlights
   const existingHighlights = document.querySelectorAll('.tile.highlight-target, .tile.highlight-move');
-  console.log('Clearing', existingHighlights.length, 'existing highlights');
+  debugLog('Clearing', existingHighlights.length, 'existing highlights');
   existingHighlights.forEach(tile => {
     tile.classList.remove('highlight-target', 'highlight-move');
   });
@@ -290,7 +299,7 @@ export function beginSimpleTargeting({ range, origin, canTarget, onSelect, onCan
           if (tile) {
             tile.classList.add(highlightClass);
             highlightedCount++;
-            console.log(`✓ Highlighted tile at ${col}, ${row} with class ${highlightClass} - classes:`, tile.className);
+            debugLog(`✓ Highlighted tile at ${col}, ${row} with class ${highlightClass} - classes:`, tile.className);
           } else {
             console.warn(`✗ No tile element found at ${col}, ${row}`);
             // Let's also try with .tile selector
@@ -298,23 +307,23 @@ export function beginSimpleTargeting({ range, origin, canTarget, onSelect, onCan
             if (tileAlt) {
               tileAlt.classList.add(highlightClass);
               highlightedCount++;
-              console.log(`✓ (Alt) Highlighted tile at ${col}, ${row} with class ${highlightClass}`);
+              debugLog(`✓ (Alt) Highlighted tile at ${col}, ${row} with class ${highlightClass}`);
             }
           }
         } else {
-          console.log(`Tile at ${col}, ${row} in range but invalid for targeting`);
+          debugLog(`Tile at ${col}, ${row} in range but invalid for targeting`);
         }
       }
     }
   }
 
-  console.log(`Total highlighted tiles: ${highlightedCount} out of ${tiles.length} valid tiles`);
+  debugLog(`Total highlighted tiles: ${highlightedCount} out of ${tiles.length} valid tiles`);
 
   // Set up click handlers
   const clickHandler = (event) => {
     const tile = event.target.closest('.tile');
     if (!tile) {
-      console.log('Click not on a tile element');
+      debugLog('Click not on a tile element');
       return;
     }
 
@@ -322,26 +331,26 @@ export function beginSimpleTargeting({ range, origin, canTarget, onSelect, onCan
     const row = parseInt(tile.dataset.row);
 
     if (!col || !row) {
-      console.log('Tile missing col/row data:', tile.dataset);
+      debugLog('Tile missing col/row data:', tile.dataset);
       return;
     }
 
-    console.log(`Clicked tile at ${col}, ${row}, highlighted:`, tile.classList.contains(highlightClass));
+    debugLog(`Clicked tile at ${col}, ${row}, highlighted:`, tile.classList.contains(highlightClass));
 
     // Check if this tile is highlighted with the correct class
     if (tile.classList.contains(highlightClass)) {
       cleanup();
-      console.log('Valid target selected:', { col, row });
+      debugLog('Valid target selected:', { col, row });
       if (onSelect) onSelect({ col, row });
     } else if (onInvalidTarget) {
-      console.log('Invalid target clicked:', { col, row });
+      debugLog('Invalid target clicked:', { col, row });
       onInvalidTarget({ col, row });
     }
   };
 
   const escapeHandler = (event) => {
     if (event.key === 'Escape') {
-      console.log('Escape pressed - cancelling targeting');
+      debugLog('Escape pressed - cancelling targeting');
       cleanup();
       if (onCancel) onCancel();
     }
@@ -353,7 +362,7 @@ export function beginSimpleTargeting({ range, origin, canTarget, onSelect, onCan
     
     // Clear all highlights
     const highlightsToRemove = document.querySelectorAll('.tile.highlight-target, .tile.highlight-move');
-    console.log('Cleaning up', highlightsToRemove.length, 'highlights');
+    debugLog('Cleaning up', highlightsToRemove.length, 'highlights');
     highlightsToRemove.forEach(tile => {
       tile.classList.remove('highlight-target', 'highlight-move');
     });
