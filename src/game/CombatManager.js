@@ -12,9 +12,24 @@ import { updatePlayerSpriteDirection } from "../data/PlayerSprites.js";
 import { setupBossObservers } from "../systems/BossObservers.js";
 import { ensureCueStack, removeCue, dieSides, fadeRemoveCue } from "../utils/CueService.js";
 import { cueService } from "../utils/CueService.js";
+import { configuredCue } from "../utils/CueConfigLoader.js";
 import { events, store } from "../core/EventBus.js";
+import { simpleCue } from "../utils/SimpleCue.js";
 import { animationScheduler } from "../utils/AnimationScheduler.js";
 import { renderParty } from "../ui/PartyPanel.js";
+
+// Debug logging helpers - only log if appropriate flags are enabled
+function debugCombatLog(...args) {
+  if (state?.debug?.logCombat) {
+    console.log(...args);
+  }
+}
+
+function debugBossLog(...args) {
+  if (state?.debug?.logBoss) {
+    console.log(...args);
+  }
+}
 
 /* ------------------------ Combat Event Queue ------------------------ */
 let combatEventQueue = [];
@@ -27,7 +42,7 @@ let currentTargetingCleanup = null; // Store cleanup function for active targeti
 
 // Enhanced cleanup function for all targeting states
 function clearAllTargeting() {
-  console.log('🎮 COMBAT [' + new Date().toLocaleTimeString() + '.' + Math.floor(Date.now() % 1000 / 100) + '] Clearing all targeting');
+  debugCombatLog('🎮 COMBAT [' + new Date().toLocaleTimeString() + '.' + Math.floor(Date.now() % 1000 / 100) + '] Clearing all targeting');
   
   // Clear visual highlights from all tiles
   document.querySelectorAll('.tile').forEach(tile => {
@@ -83,7 +98,7 @@ async function processCombatEventQueue() {
     const event = combatEventQueue.shift();
     
     if (event.description) {
-      console.log(`Processing combat event: ${event.description}`);
+      debugCombatLog(`Processing combat event: ${event.description}`);
     }
     
     // Execute the event
@@ -156,7 +171,17 @@ function hasPassive(p, id){
   return list.some(ps => ps.id === id);
 }
 
-function currentPlayer(){ return state.players[state.turnIdx % state.players.length]; }
+function currentPlayer(){ 
+  // Use combat turn system when in combat mode
+  if (state.mode === 'combat' && state.turnOrder && state.turnOrder.length > 0) {
+    const currentSlot = state.turnOrder[state.turnPtr];
+    if (currentSlot && currentSlot.kind === 'player' && typeof currentSlot.idx === 'number') {
+      return state.players[currentSlot.idx];
+    }
+  }
+  // Fallback for non-combat or legacy situations
+  return state.players[state.turnIdx % state.players.length]; 
+}
 function abilityMod(score){ return Math.floor((Number(score || 0) - 10) / 2); }
 
 /* ------------------------ Cue stack ------------------------ */
@@ -165,47 +190,51 @@ cueService.setLogHandler(bossLog);
 
 // Smart automatic cue system - categorizes by context and applies appropriate timing
 let lastInfoCue = null; // Keep for compatibility but deprecate usage
-function cue(text, className=""){
-  // Categorize cue type based on content patterns
+// Original cue implementation
+function originalCueImplementation(text, className="") {
   const cueType = categorizeCueByContent(text);
   
   switch(cueType) {
     case 'error':
-      // Errors need user acknowledgment
       const { el: errorEl } = cueService.sticky(text, { className });
       lastInfoCue = errorEl;
       break;
     case 'quick-feedback':
-      // Quick feedback should disappear fast (0.8s)
       const { el: quickEl } = cueService.announce(text, { className, duration: 800 });
       lastInfoCue = quickEl;
       break;
     case 'spell-cast':
-      // Spell casts should auto-advance quickly (1.5s)
       const { el: spellEl } = cueService.announce(text, { className, duration: 1500 });
       lastInfoCue = spellEl;
       break;
     case 'damage':
-      // Damage numbers should be brief (1s)
       const { el: damageEl } = cueService.announce(text, { className, duration: 1000 });
       lastInfoCue = damageEl;
       break;
     case 'status-effect':
-      // Status effects should display medium duration (2s)
       const { el: statusEl } = cueService.announce(text, { className, duration: 2000 });
       lastInfoCue = statusEl;
       break;
     case 'not-implemented':
-      // Development messages need attention
       const { el: devEl } = cueService.sticky(text, { className });
       lastInfoCue = devEl;
       break;
     default:
-      // General info should auto-advance (1.5s)
       const { el: infoEl } = cueService.announce(text, { className, duration: 1500 });
       lastInfoCue = infoEl;
   }
 }
+
+// Simple, unified cue system
+const cue = simpleCue;
+
+// Add to window for easy console access
+window.cues = {
+  status: () => import("../utils/SimpleCue.js").then(({ logCueStatus }) => logCueStatus()),
+  toggle: (pattern, enabled) => import("../utils/SimpleCue.js").then(({ toggleCue }) => toggleCue(pattern, enabled)),
+  disable: (pattern) => import("../utils/SimpleCue.js").then(({ toggleCue }) => toggleCue(pattern, false)),
+  enable: (pattern) => import("../utils/SimpleCue.js").then(({ toggleCue }) => toggleCue(pattern, true))
+};
 
 // Content-based cue categorization for automatic timing
 function categorizeCueByContent(text) {
@@ -284,7 +313,8 @@ function syncUI(){
   updateActionBar({
     inCombat: state.mode === "combat",
     player: {
-      name: p.name, hp: p.hp, hpMax: p.hpMax,
+  name: p.name, hp: p.hp, hpMax: p.hpMax,
+  classId: p.classId, affinity: p.affinity, attrs: p.attrs,
       action: p.turn.action, bonus: p.turn.bonus,
       canMove,
       canBurn: canCastBurn,
@@ -309,42 +339,42 @@ function syncUI(){
   } catch {}
 }
 
-function targetAndCastBurn(){
+function targetAndCastSpell(spellName, range = 7, effectFn = null){
   const p = currentPlayer();
   if (!state.isPlayerTurn) { cue("Not your turn."); return; }
-  const hasBurn = hasSpell(p, "burn");
-  if (!hasBurn) { 
+  const hasSpellCheck = hasSpell(p, spellName);
+  if (!hasSpellCheck) { 
     cue(`${p.name} has no attack spells available.`); 
     return; 
   }
   if (p.turn.action <= 0) { cue(`${p.name} has no actions left.`); return; }
 
-  // Clear any pending movement before starting burn targeting
+  // Clear any pending movement before starting targeting
   if (state.pendingSteps > 0) {
-    console.log('Clearing pending movement before burn targeting');
+    debugCombatLog(`Clearing pending movement before ${spellName} targeting`);
     state.pendingSteps = 0;
     cueService.remove('movement-prompt');
   }
 
   // Toggle: second click cancels targeting
-  if (activeTargeting === 'burn'){
+  if (activeTargeting === spellName){
     clearActiveTargeting(); 
-    cue("Burn targeting cancelled."); 
+    cue(`${spellName.charAt(0).toUpperCase() + spellName.slice(1)} targeting cancelled.`); 
     syncUI(); 
     return;
   }
 
-  activeTargeting = 'burn';
+  activeTargeting = spellName;
   const origin = { col: p.col, row: p.row };
   
-  console.log('Starting burn targeting from:', origin);
-  console.log('Boss position:', state.boss ? { col: state.boss.col, row: state.boss.row, w: state.boss.w, h: state.boss.h } : 'NO BOSS');
+  debugCombatLog(`Starting ${spellName} targeting from:`, origin);
+  debugCombatLog('Boss position:', state.boss ? { col: state.boss.col, row: state.boss.row, w: state.boss.w, h: state.boss.h } : 'NO BOSS');
   
   // Add escape key listener for this targeting session
   document.addEventListener('keydown', handleTargetingEscapeKey);
   
   const targetingResult = beginSimpleTargeting({
-    range: 7,
+    range,
     origin,
   distanceMetric: 'dnd35', // apply optional 5/10 alternating diagonal cost for spell range
     canTarget: (col, row) => {
@@ -352,29 +382,35 @@ function targetAndCastBurn(){
       return true;
     },
     onSelect: ({col,row}) => {
-      console.log(`Burn target selected at ${col}, ${row}`);
+      debugCombatLog(`${spellName} target selected at ${col}, ${row}`);
       clearActiveTargeting();
       
       // Check if the selected tile would hit the boss
       const hitsBoss = intersectsBoss(col, row);
-      console.log(`Selected tile ${col}, ${row} hits boss: ${hitsBoss}`);
+      debugCombatLog(`Selected tile ${col}, ${row} hits boss: ${hitsBoss}`);
       
       if (!hitsBoss){ 
         cue("Target misses - no valid target at that location."); 
         return; 
       }
       
-      // Apply burn effect
-      applyBurnFrom(p);
-      cue(`${p.name} casts Burn on ${state.boss.name}.`);
-      bossLog(`${p.name} casts Burn on ${state.boss.name}.`);
+      // Apply spell effect (use provided function or default to burn)
+      if (effectFn) {
+        effectFn(p);
+      } else if (spellName === 'burn') {
+        applyBurnFrom(p);
+      }
+      
+      const spellDisplayName = spellName.charAt(0).toUpperCase() + spellName.slice(1);
+      cue(`${p.name} casts ${spellDisplayName} on ${state.boss.name}.`);
+      bossLog(`${p.name} casts ${spellDisplayName} on ${state.boss.name}.`);
       
       p.turn.action -= 1;
       syncUI();
     },
     onCancel: () => { 
       clearActiveTargeting();
-      cue("Burn targeting cancelled.");
+      cue(`${spellName.charAt(0).toUpperCase() + spellName.slice(1)} targeting cancelled.`);
       syncUI(); 
     },
     onInvalidTarget: () => {
@@ -388,9 +424,14 @@ function targetAndCastBurn(){
     currentTargetingCleanup = targetingResult.cleanup;
   }
   
-  cue("Select a target for Burn...");
-  bossLog(`${p.name} begins targeting for Burn spell.`);
+  const spellDisplayName = spellName.charAt(0).toUpperCase() + spellName.slice(1);
+  cue(`Select a target for ${spellDisplayName}...`);
+  bossLog(`${p.name} begins targeting for ${spellDisplayName} spell.`);
   syncUI();
+}
+
+function targetAndCastBurn(){
+  targetAndCastSpell('burn', 7, applyBurnFrom);
 }
 
 function castInferno(){
@@ -441,9 +482,9 @@ function intersectsBoss(col,row){
   const bossInfo = `Boss at (${state.boss.col}, ${state.boss.row}) size ${state.boss.w}x${state.boss.h}`;
   
   if (result) {
-    console.log(`✅ intersectsBoss(${col}, ${row}): TRUE - ${bossInfo}`);
+    debugCombatLog(`✅ intersectsBoss(${col}, ${row}): TRUE - ${bossInfo}`);
   } else {
-    console.log(`❌ intersectsBoss(${col}, ${row}): FALSE - ${bossInfo}`);
+    debugCombatLog(`❌ intersectsBoss(${col}, ${row}): FALSE - ${bossInfo}`);
   }
   
   return result;
@@ -488,7 +529,7 @@ function applyBurnFrom(p){
   if (!state.boss) return;
   
   // Debug: Check boss position
-  console.log('Boss position:', state.boss.col, state.boss.row);
+  debugCombatLog('Boss position:', state.boss.col, state.boss.row);
   
   // Play burn application animation on boss
   playBurnApplication(state.boss.col, state.boss.row, state.boss.w, state.boss.h);
@@ -501,6 +542,7 @@ function applyBurnFrom(p){
     const detonate = tickAmount * fixedTicks;
     if (detonate > 0) {
       state.boss.takeDamage(detonate, p);
+      syncUI(); // Update action bar with new boss HP immediately
       cue(`Inferno detonates Burn for ${detonate} immediate damage.`);
     } else {
       cue(`Inferno detonates, but there was no pending Burn damage to convert.`);
@@ -548,7 +590,7 @@ function endTurnInternal(){
   state.turnPtr = (state.turnPtr + 1) % len;
   if (state.turnPtr === 0) {
     state.round += 1;
-    const { wait } = cueService.clickToContinue(`Round ${state.round} begins.`);
+    const { wait } = configuredCue(`Round ${state.round} begins.`, { clickToContinue: true });
     // Note: Don't await here as this should be non-blocking
     // Removed incorrect Inferno animation at round start.
   }
@@ -577,7 +619,7 @@ function beginTurnAtCurrentPtr(){
   
   state.isPlayerTurn = true;
   // Replace any previous cue (e.g., boss turn) with player turn cue
-  const { wait } = cueService.clickToContinue(`${p.name}'s turn begins.`);
+  const { wait } = configuredCue(`${p.name}'s turn begins.`, { clickToContinue: true });
   // Show white highlight around the active player's tile in combat
   setActiveTokenOutlineForPlayerId(p.id);
   syncUI();
@@ -605,8 +647,8 @@ function bossPhase(){
   
   // Simple boss turn start
   queueCombatEvent(async () => {
-    const { wait } = cueService.clickToContinue(`${state.boss.name}'s turn begins.`, { className: 'boss-card-cue' });
-    await wait;
+    // Boss turn starts automatically, no click required
+    cue(`${state.boss.name}'s turn begins.`);
     
     // Reset per-turn flags  
     state.__bossFirstDrawShown = false;
@@ -625,6 +667,7 @@ function bossPhase(){
     }
     if (totalBurn > 0) {
       state.boss.takeDamage(totalBurn, { name: 'Burn' });
+      syncUI(); // Update action bar with new boss HP immediately
     }
     // Now tick (may remove expired ones after damage is applied)
     state.boss.tickStatuses();
@@ -637,29 +680,31 @@ function bossPhase(){
     
     while (next && safety-- > 0) {
       // 1. Show what card was drawn - CLICK TO CONTINUE
-      const { wait: waitDraw } = cueService.clickToContinue(`Boss draws: ${next.name}`, { className: 'boss-card-cue' });
+      const { wait: waitDraw } = configuredCue(`Boss draws: ${next.name}`, { className: 'boss-card-cue', clickToContinue: true });
       await waitDraw;
       
       // 2. Handle advance keyword first if present
       if (next.advance) {
-        const { wait: waitAdvance } = cueService.clickToContinue("Advance!", { className: 'boss-card-cue' });
+        const { wait: waitAdvance } = configuredCue("Advance!", { className: 'boss-card-cue', clickToContinue: true });
         await waitAdvance;
         await performAdvance();
         await new Promise(resolve => setTimeout(resolve, 300));
       }
       
-      // 3. Resolve the main card action with simple cues
+      // 4. Resolve the main card action with simple cues
       const cycle = await resolveBossCardSimple(next);
       
-      // 4. Show cycle if needed
-      if (cycle === 'cycle') {
-        const { wait: waitCycle } = cueService.clickToContinue("Cycle!", { className: 'boss-card-cue' });
-        await waitCycle;
-      }
+      // 5. Discard the resolved card
+      discardBossCard(next);
       
-      // 5. Discard and check for next card
-      state.boss.deck.discard.push(next);
-      next = (cycle === 'cycle') ? drawBossCard() : null;
+      // 6. Show cycle if needed, then check for next card  
+      if (cycle === 'cycle') {
+        const { wait: waitCycle } = configuredCue("Cycle!", { clickToContinue: true, className: 'boss-card-cue' });
+        await waitCycle;
+        next = drawBossCard(); // Draw next card after cycle
+      } else {
+        next = null; // End boss turn
+      }
       
       if (next) {
         await new Promise(resolve => setTimeout(resolve, 500));
@@ -667,7 +712,7 @@ function bossPhase(){
     }
     
     // Boss turn end - AUTO ADVANCE to next turn
-    const { wait: waitEnd } = cueService.clickToContinue(`${state.boss.name}'s turn ends.`, { className: 'boss-card-cue' });
+    const { wait: waitEnd } = configuredCue(`${state.boss.name}'s turn ends.`, { className: 'boss-card-cue', clickToContinue: true });
     await waitEnd;
     endTurnInternal();
   }, 1200, "Draw and resolve boss cards");
@@ -675,13 +720,44 @@ function bossPhase(){
 function drawBossCard(){
   const deck = state.boss.deck;
   if (!deck) return null;
-  if (deck.draw.length === 0){
-    deck.draw = shuffle(deck.discard);
-    deck.discard = [];
+  
+  // Support both legacy format {draw, discard} and new format {drawPile, discardPile}
+  const drawPile = deck.drawPile || deck.draw;
+  const discardPile = deck.discardPile || deck.discard;
+  
+  if (!drawPile || drawPile.length === 0){
+    // Reshuffle discard into draw pile
+    if (discardPile && Array.isArray(discardPile) && discardPile.length > 0) {
+      const cardsToReshuffle = discardPile.splice(0); // Remove all cards from discard
+      const reshuffled = shuffle(cardsToReshuffle);
+      if (deck.drawPile !== undefined) {
+        deck.drawPile = reshuffled;
+      } else {
+        deck.draw = reshuffled;
+      }
+      // Update reference for next draw
+      return drawBossCard(); // Recursive call to draw from newly shuffled deck
+    } else {
+      return null; // No cards available
+    }
   }
-  const card = deck.draw.shift() || null;
-  if (card) deck.current = card;
+  
+  const card = (Array.isArray(drawPile) ? drawPile.shift() : null) || null;
+  if (card) {
+    deck.current = card;
+  }
   return card;
+}
+
+// Separate function to discard a card after it's been resolved
+function discardBossCard(card) {
+  const deck = state.boss.deck;
+  if (!deck || !card) return;
+  
+  const discardPile = deck.discardPile || deck.discard;
+  if (discardPile && Array.isArray(discardPile)) {
+    discardPile.push(card);
+  }
 }
 
 // ---- Boss helpers (keywords and attacks) ----
@@ -833,30 +909,30 @@ async function resolveBossCardSimple(card) {
   
   switch(card.id) {
     case 'swipe': {
-      const { wait: waitAttack } = cueService.clickToContinue("Swipe attack!", { className: 'boss-card-cue' });
+      const { wait: waitAttack } = configuredCue("Swipe attack!", { className: 'boss-card-cue', clickToContinue: true });
       await waitAttack;
       
       if (target && state.boss.isAdjacentTo(target)) {
         dealDamageToPlayer(target, 4, { reason: '(Swipe)' });
       } else {
-        const { wait: waitMiss } = cueService.clickToContinue("Swipe misses!", { className: 'boss-card-cue' });
+        const { wait: waitMiss } = configuredCue("Swipe misses!", { className: 'boss-card-cue', clickToContinue: true });
         await waitMiss;
       }
       break;
     }
     
     case 'charge': {
-      const { wait: waitCharge } = cueService.clickToContinue("Charge attack!", { className: 'boss-card-cue' });
+      const { wait: waitCharge } = configuredCue("Charge attack!", { clickToContinue: true, className: 'boss-card-cue' });
       await waitCharge;
       
       const inRange = await tryCharge(4);
       
       if (inRange && target) {
-        const { wait: waitConnect } = cueService.clickToContinue("Charge connects!", { className: 'boss-card-cue' });
+        const { wait: waitConnect } = configuredCue("Charge connects!", { clickToContinue: true, className: 'boss-card-cue' });
         await waitConnect;
         dealDamageToPlayer(target, 2, { reason: '(Charge)' });
       } else {
-        const { wait: waitFail } = cueService.clickToContinue("Charge fails!", { className: 'boss-card-cue' });
+        const { wait: waitFail } = configuredCue("Charge fails!", { clickToContinue: true, className: 'boss-card-cue' });
         await waitFail;
       }
       break;
@@ -864,11 +940,11 @@ async function resolveBossCardSimple(card) {
     
     case 'enrage': {
       if (state.__bossMovedThisTurn) {
-        const { wait: waitFizzle } = cueService.clickToContinue("Enrage fizzles!", { className: 'boss-card-cue' });
+        const { wait: waitFizzle } = configuredCue("Enrage fizzles!", { clickToContinue: true, className: 'boss-card-cue' });
         await waitFizzle;
         doCycle = true;
       } else {
-        const { wait: waitEnrage } = cueService.clickToContinue("Boss becomes Enraged!", { className: 'boss-card-cue' });
+        const { wait: waitEnrage } = configuredCue("Boss becomes Enraged!", { clickToContinue: true, className: 'boss-card-cue' });
         await waitEnrage;
         if (state.boss) state.boss.enrageNext = true;
       }
@@ -876,7 +952,7 @@ async function resolveBossCardSimple(card) {
     }
     
     case 'roar': {
-      const { wait: waitRoar } = cueService.clickToContinue("Terrifying Roar!", { className: 'boss-card-cue' });
+      const { wait: waitRoar } = configuredCue("Terrifying Roar!", { clickToContinue: true, className: 'boss-card-cue' });
       await waitRoar;
       
       // Apply movement penalty to players within 20 tiles
@@ -887,14 +963,25 @@ async function resolveBossCardSimple(card) {
         }
       }
       
-      const { wait: waitPenalty } = cueService.clickToContinue("Movement penalty applied!", { className: 'boss-card-cue' });
+      const { wait: waitPenalty } = configuredCue("Movement penalty applied!", { clickToContinue: true, className: 'boss-card-cue' });
       await waitPenalty;
       doCycle = true;
       break;
     }
     
+    case 'advance1':
+    case 'advance': {
+      // Legacy advance card or advance action
+      const { wait: waitAdvance } = configuredCue("Advance!", { className: 'boss-card-cue', clickToContinue: true });
+      await waitAdvance;
+      await performAdvance();
+      break;
+    }
+    
     default: {
-      // Unknown card - no action
+      // Unknown card - show warning and do nothing
+      const { wait: waitUnknown } = configuredCue(`Unknown boss action: ${card.id}`, { clickToContinue: true, className: 'boss-card-cue' });
+      await waitUnknown;
       break;
     }
   }
@@ -909,40 +996,40 @@ async function resolveBossCardWithCues(card) {
   let doCycle = false;
   switch(card.id){
     case 'swipe': {
-      await cueService.clickToContinue("Swipe attack!", { className: 'boss-card-cue' });
+      await configuredCue("Swipe attack!", { className: 'boss-card-cue', clickToContinue: true }).wait;
       
       if (target && state.boss.isAdjacentTo(target)) {
         dealDamageToPlayer(target, 4, { reason: '(Swipe)' });
       } else {
-  await cueService.clickToContinue("Swipe misses!", { className: 'boss-card-cue' });
+  await configuredCue("Swipe misses!", { className: 'boss-card-cue', clickToContinue: true }).wait;
       }
       break;
     }
     case 'charge': {
-      await cueService.clickToContinue("Charge attack!", { className: 'boss-card-cue' });
+      await configuredCue("Charge attack!", { clickToContinue: true, className: 'boss-card-cue' });
       
       const inRange = await tryCharge(4); // slide like charging
       
       if (inRange && target) {
-  await cueService.clickToContinue("Charge connects!", { className: 'boss-card-cue' });
+  await configuredCue("Charge connects!", { clickToContinue: true, className: 'boss-card-cue' });
         dealDamageToPlayer(target, 2, { reason: '(Charge)' });
       } else {
-  await cueService.clickToContinue("Charge fails!", { className: 'boss-card-cue' });
+  await configuredCue("Charge fails!", { clickToContinue: true, className: 'boss-card-cue' });
       }
       break;
     }
   case 'enrage': {
       if (state.__bossMovedThisTurn) {
-    await cueService.announce(["Enrage fizzles!"], { scope: 'boss-turn' });
+    await configuredCue("Enrage fizzles!", { duration: 1500, scope: 'boss-turn' });
         doCycle = true;
       } else {
-    await cueService.clickToContinue("Boss becomes Enraged!", { className: 'boss-card-cue' });
+    await configuredCue("Boss becomes Enraged!", { clickToContinue: true, className: 'boss-card-cue' });
         if (state.boss) state.boss.enrageNext = true;
       }
       break;
     }
   case 'roar': {
-    await cueService.clickToContinue("Terrifying Roar!", { className: 'boss-card-cue' });
+    await configuredCue("Terrifying Roar!", { clickToContinue: true, className: 'boss-card-cue' });
       
       // Apply movement penalty to players within 20 tiles
       for (const pl of state.players || []){
@@ -952,7 +1039,7 @@ async function resolveBossCardWithCues(card) {
         }
       }
       
-  await cueService.announce(["Movement penalty applied!"], { scope: 'boss-turn' });
+  await configuredCue("Movement penalty applied!", { duration: 1500, scope: 'boss-turn' });
       doCycle = true;
       break;
     }
@@ -1032,6 +1119,10 @@ function rollDie(spec){
 }
 
 function shuffle(arr){
+  if (!arr || !Array.isArray(arr)) {
+    console.warn('[CombatManager] shuffle called with invalid array:', arr);
+    return [];
+  }
   const a = Array.from(arr);
   for (let i=a.length-1;i>0;i--){
     const j = Math.floor(Math.random() * (i+1));
@@ -1127,39 +1218,32 @@ export function startCaveCombat(){
     console.error('Failed to render boss panel:', error);
   }
 
-  // Ensure boss is a proper entity or create one
+  // Ensure boss is a proper entity (legacy approach for now)
   if (!(state.boss instanceof BossEntity)) {
     const oldBoss = state.boss;
-    state.boss = BossFactory.createBear(
-      oldBoss?.col ?? 8, 
-      oldBoss?.row ?? 8
-    );
-    // Preserve any existing state
-    if (oldBoss) {
-      if (oldBoss.hp !== undefined) state.boss.hp = oldBoss.hp;
-      if (oldBoss.hpMax !== undefined) state.boss.hpMax = oldBoss.hpMax;
-      if (oldBoss.statuses) {
-        state.boss.statuses = [...oldBoss.statuses];
-      }
-    }
+    console.debug('[CombatManager] Creating basic boss entity');
+    state.boss = new BossEntity({
+      id: `bear_combat_${Date.now()}`,
+      type: 'bear',
+      name: 'Bear',
+      col: oldBoss?.col ?? 8,
+      row: oldBoss?.row ?? 8,
+      w: 1,
+      h: 2,
+      hp: oldBoss?.hp ?? 30,
+      hpMax: oldBoss?.hpMax ?? 30,
+      movementDie: 'd3'
+    });
   }
   
   // Set up observers for the boss
   setupBossObservers(state.boss);
   // Boss deck: build with keywords; d3 movement
   if (!state.boss.movementDie) state.boss.movementDie = "d3";
-  if (!state.boss.deck) {
-    const cards = [];
-    // 5 Swipes (advance)
-    for (let i=0;i<5;i++) cards.push({ id:'swipe', name:'Swipe', advance:true });
-    // 2 Charges (advance)
-    for (let i=0;i<2;i++) cards.push({ id:'charge', name:'Charge', advance:true });
-    // 1 Enrage
-    cards.push({ id:'enrage', name:'Enrage' });
-  // 1 Roar (cycle)
-  cards.push({ id:'roar', name:'Roar', cycle:true });
-    state.boss.deck = { draw: shuffle(cards), discard: [], current: null };
-  }
+  
+  // Deck creation is now handled by Cave.js - don't override it here
+  console.debug('[CombatManager] Boss deck setup - letting Cave.js handle deck creation');
+  
   // Reset Inferno pulse escalation at combat start
   state.infernoPulse = 2;
 
@@ -1168,18 +1252,15 @@ export function startCaveCombat(){
 
   mountActionBar({
     onMove: startPlayerMovement,
-  onAction: handleActionButton,
-  onBonus: handleBonusButton,
-    onEndTurn: manualEndTurn, // IMPORTANT: manual path only
+    onAction: handleActionButton,
+    onBonus: handleBonusButton,
+    onEndTurn: manualEndTurn,
   });
 
   // Hide the old Boss Deck button; deck is now integrated into the boss panel
   const deckBtn = document.getElementById('btn-boss-deck');
   if (deckBtn) deckBtn.hidden = true;
   // Update context text for combat
-  const ctx = document.getElementById('context-text');
-  if (ctx) ctx.textContent = 'Your turn: Move (once), cast an action or bonus, then End Turn.';
-
   // Build turn order by initiative: roll movement die for each participant (players + boss)
   if (!combatBooted){
     if (combatBootStarted) {
@@ -1198,7 +1279,7 @@ export function startCaveCombat(){
       try {
         document.querySelectorAll('#cue-stack .initiative-header').forEach(el => el.remove());
       } catch {}
-      cueService.info("Rolling for initiative…", { className: "initiative-header", key: "initiative-header" });
+      configuredCue("Rolling for initiative…", { className: "initiative-header" });
   }, 500, "Initiative header", true);
 
   // Players: single result cue each (no intermediate 'rolling…' indicator)
@@ -1209,7 +1290,7 @@ export function startCaveCombat(){
       const sides = Math.max(1, Number(p.moveDie ?? 4));
       const roll = state.rng.int(1, sides);
       entries.push({ kind:'player', idx:playerIndex, roll, tb: state.rng.int(1, 1000) });
-      cueService.info(`${p.name} rolls d${sides}… ${roll}!`, { key: `player-${playerIndex}-result` });
+      configuredCue(`${p.name} rolls d${sides}… ${roll}!`, { key: `player-${playerIndex}-result` });
     }, 500, `Player ${i+1} result`, true);
   }
 
@@ -1218,7 +1299,7 @@ export function startCaveCombat(){
     const sides = Math.max(1, Number(state.boss.movementDie === 'd3' ? 3 : state.boss.movementDie || 3));
     const bossRoll = state.rng.int(1, sides);
     entries.push({ kind:'boss', roll: bossRoll, tb: state.rng.int(1,1000) });
-    cueService.info(`${state.boss.name} rolls d${sides}… ${bossRoll}!`, { key: "boss-result" });
+    configuredCue(`${state.boss.name} rolls d${sides}… ${bossRoll}!`, { key: "boss-result" });
   }, 500, "Boss result", true);
     
   // Resolve order and cleanup rolling stickies (require player click before proceeding to first turn)
@@ -1236,7 +1317,7 @@ export function startCaveCombat(){
           return `${i+1}. ${state.boss.name}`;
         }
       }).join(', ');
-      const { wait: waitTurnOrder } = cueService.clickToContinue(`Turn order: ${orderText}`);
+      const { wait: waitTurnOrder } = configuredCue(`Turn order: ${orderText}`);
       await waitTurnOrder;
       // After acknowledgment, remove all initiative-related cues
       try {
@@ -1251,7 +1332,7 @@ export function startCaveCombat(){
     // Start combat automatically
     queueCombatEvent(async () => {
       if (typeof state.round !== 'number' || state.round < 1) state.round = 1;
-      const { wait } = cueService.clickToContinue("Combat started. Round 1.");
+      const { wait } = configuredCue("Combat started. Round 1.", { clickToContinue: true });
       await wait;
       combatBooted = true;
       combatBootStarted = false;
@@ -1334,7 +1415,7 @@ function startPlayerMovement(){
     return;
   }
   state.pendingSteps = steps;
-  cueService.info(`Movement: ${steps} step${steps===1?'':'s'} available. Click a highlighted tile to move.`, { key: 'movement-prompt' });
+  configuredCue(`Movement: ${steps} step${steps===1?'':'s'} available. Click a highlighted tile to move.`, { key: 'movement-prompt' });
 
   // Compute 8-directional BFS with no corner-cutting
   const max = state.grid?.cells ?? 15;
@@ -1437,14 +1518,14 @@ function startPlayerMovement(){
       if (remainingAfterMove > 0) {
         message += ` ${remainingAfterMove} movement remaining.`;
       }
-      const { wait } = cueService.clickToContinue(message);
+      const { wait } = configuredCue(message, { clickToContinue: true });
       syncUI();
     },
     onCancel: () => { 
       state.pendingSteps = 0; 
       cueService.remove('movement-prompt');
       clearActiveTargeting();
-      cueService.clickToContinue("Movement cancelled (roll preserved)." );
+      const { wait } = configuredCue("Movement cancelled (roll preserved).", { clickToContinue: true });
       syncUI(); 
     }
   });

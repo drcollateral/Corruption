@@ -2,7 +2,11 @@
  * UI Manager - Clean interface between game systems and DOM
  * Handles all UI updates, messages, and user interactions
  */
+import { EventBus } from '../core/EventBus.js';
+import { state } from '../core/GameState.js';
+import { Config } from '../data/Config.js';
 import { cueService } from '../utils/CueService.js';
+import { configuredCue } from '../utils/CueConfigLoader.js';
 
 export class UIManager {
   constructor(eventBus) {
@@ -51,7 +55,9 @@ export class UIManager {
       });
     }
 
-    // Action button handling
+    // Action button handling - DISABLED: ActionBar.js handles these directly
+    // The legacy ActionBar system works perfectly, so we don't need to compete
+    /*
     document.addEventListener('click', (e) => {
       if (e.target.matches('.action-btn')) {
         const actionId = e.target.dataset.action;
@@ -63,6 +69,7 @@ export class UIManager {
         this.eventBus.emit('action:requested', { actionId, type: 'bonus' });
       }
     });
+    */
   }
 
   // Message display methods
@@ -223,9 +230,8 @@ export class UIManager {
   }
 
   showBossAction(boss, action) {
-    return cueService.bossDraw(action.name, {
-      key: 'boss-action',
-      message: `Boss uses: ${action.name}`
+    return configuredCue("boss-action-display", {
+      actionName: action.name
     });
   }
 }

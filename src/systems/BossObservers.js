@@ -4,8 +4,16 @@
 import { updateBurnOverlayPositions, removeBurnDebuffOverlay, addBurnDebuffOverlay, playBurnTick } from "./EffectSystem.js";
 import { syncBossPanel, bossLog } from "../ui/BossPanel.js";
 import { cueService } from "../utils/CueService.js";
+import { configuredCue } from "../utils/CueConfigLoader.js";
 import { isDotKind } from "../data/DamageTypes.js";
 import { state } from "../core/GameState.js";
+
+// Debug logging helper - only log if boss logging is enabled
+function debugBossLog(...args) {
+  if (state?.debug?.logBoss) {
+    console.log(...args);
+  }
+}
 
 export class BossVisualEffectsObserver {
   constructor() {
@@ -97,11 +105,16 @@ export class BossVisualEffectsObserver {
     
     const srcName = source?.name || (typeof source === 'object' && source.kind) || 'unknown';
     const line = `${boss.name} took ${amount} damage from ${srcName}`;
-    console.log(line);
+    debugBossLog(line);
     bossLog(line);
     // If burn damage, surface an explicit cue so player knows to click to advance if flow is paused
     if (isDotKind(srcName)) {
-      cueService.clickToContinue(`${boss.name} takes ${amount} ${srcName.charAt(0).toUpperCase()+srcName.slice(1)} damage.`);
+      const sourceType = srcName.charAt(0).toUpperCase() + srcName.slice(1);
+      configuredCue("boss-dot-damage", {
+        bossName: boss.name,
+        amount: amount,
+        sourceType: sourceType
+      });
     }
   }
   
