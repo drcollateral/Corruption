@@ -31,6 +31,9 @@ src/
 	entities/BossEntity.js    Boss statuses & burn stack handling
 	systems/EffectSystem.js   Visual / timing effects (Inferno ring, burn ticks)
 	ui/                       Action bar, panels, setup flow
+	data/CueConfig.js         80+ configurable cue definitions
+	utils/CueConfigLoader.js  Template matching & F12 logging
+	utils/CueService.js       Core cue engine (DOM manipulation)
 	data/BossRegistry.js      Boss deck definitions & metadata
 	factories/BossCreator.js  Modular boss creation system
 	utils/BossUtils.js        Boss management utilities
@@ -112,6 +115,42 @@ The system automatically handles deck creation, validation, and UI integration.
 
 ### Status / Buff
 Add definition to `BuffSystem.BUFFS`; use `addBuff`, `clearBuff`, `consumeBuff`. If duration‑based, set `defaultDuration` and let `tickBuffs` prune.
+
+## Cue Management System
+Comprehensive message management with F12 debugging support:
+
+### Features
+- **80+ configurable cue definitions** in `data/CueConfig.js`
+- **Enable/disable per cue** for spam control
+- **Template matching** with `{placeholder}` dynamic content
+- **F12 console integration** with timestamps and categories
+- **Debug checkbox** in setup for easy toggle
+
+### Usage
+```javascript
+// Use configured cues instead of direct cueService calls
+configuredCue("spell-cast", {
+  playerName: "Mage",
+  spellName: "Fireball", 
+  targetName: "Goblin"
+});
+// Renders: "Mage casts Fireball on Goblin."
+```
+
+### Configuration
+Each cue supports:
+- `message`: Template with `{placeholder}` support
+- `enabled`: Boolean to show/hide
+- `behavior`: "announce", "click-to-continue", "sticky", etc.
+- `duration`: Auto-dismiss time (ms)
+- `category`: For filtering ("combat", "boss", "spells", etc.)
+
+### Debugging
+Enable cue debugging in setup, then check F12 console for:
+- 📢 Active cue logs with timestamps
+- 🚫 Disabled cue notifications  
+- 🔍 Template matching details
+- 📊 Configuration loading status
 
 ## Design Notes / Philosophy
 - Single authoritative combat flow (no hidden simultaneous resolution)
