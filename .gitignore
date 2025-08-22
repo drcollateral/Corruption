@@ -1,0 +1,21 @@
+# Development and build files
+*.ps1
+temp_*.js
+cue-config.json
+*.log
+
+# IDE files
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Backup files
+*.backup
+*_backup.*
+
+# Node modules (if any)
+node_modules/
