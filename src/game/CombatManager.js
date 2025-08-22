@@ -292,6 +292,11 @@ function syncUI(){
   canInferno: state.isPlayerTurn && hasSpell(p, "inferno") && !isTargeting() && (p.turn.bonus > 0 || hasInfernoActive),
       canEndTurn: state.isPlayerTurn,
       hasInferno: hasInfernoActive,
+      movementInfo: {
+        rolled: p.turn.movementRolled ? (p.turn.movementRolledValue || 0) : null,
+        remaining: p.turn.remainingMovement,
+        used: p.turn.moved
+      }
     },
     actions: actions.map(s => ({ id:s.id, name:s.name, enabled: state.isPlayerTurn && p.turn.action>0 && !isTargeting() })),
   bonuses: bonuses.map(bs => ({ id:bs.id, name:bs.name, enabled: state.isPlayerTurn && !isTargeting() && (bs.id==="inferno" ? (p.turn.bonus>0 || hasInfernoActive) : p.turn.bonus>0) })),
@@ -398,12 +403,10 @@ function castInferno(){
   // Refund up to original max
   const max = Math.max(1, p.turn.bonusMax || 1);
   if (p.turn.bonus < max) p.turn.bonus = Math.min(max, p.turn.bonus + 1);
-  cue(`${p.name} dismisses Inferno priming.`);
   } else {
     if (p.turn.bonus <= 0) { cue(`${p.name} has no bonus actions left.`); return; }
     addBuff(p, 'inferno_primed', { stacks: 1 });
     p.turn.bonus -= 1;
-    cue(`${p.name} primes Inferno: next Burn converts its 3 ticks to immediate damage and pulses.`);
   }
   syncUI();
 }
@@ -565,7 +568,7 @@ function beginTurnAtCurrentPtr(){
   // Player turn setup
   state.turnIdx = slot.idx;
   const p = currentPlayer();
-  p.turn = { action: 1, bonus: 1, bonusMax: 1, moved: 0, remainingMovement: 0, movementRolled: false }; // Track remaining movement points & if roll consumed
+  p.turn = { action: 1, bonus: 1, bonusMax: 1, moved: 0, remainingMovement: 0, movementRolled: false, movementRolledValue: 0 }; // Track remaining movement points & if roll consumed
   // Clear any remaining turn-based effects at start of player's turn
   if (p.effects) p.effects = p.effects.filter(eff => eff.kind !== "inferno_next");
   
@@ -1317,8 +1320,9 @@ function startPlayerMovement(){
     } else {
       cue(`Movement rolled: d${die} = ${rolled}.`);
     }
-    p.turn.remainingMovement = rolled; // Bank it immediately so cancelling later does not re-roll
-    p.turn.movementRolled = true;
+  p.turn.remainingMovement = rolled; // Bank it immediately so cancelling later does not re-roll
+  p.turn.movementRolled = true;
+  p.turn.movementRolledValue = rolled;
     steps = rolled;
   } else {
     steps = p.turn.remainingMovement;

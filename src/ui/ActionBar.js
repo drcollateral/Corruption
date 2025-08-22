@@ -67,6 +67,12 @@ export function updateActionBar(model){
     b.textContent = label + (enhanced ? " 🔥" : "");
     b.disabled = !enabled;
     if (enhanced) b.classList.add("enhanced");
+    // Basic tooltip via title; could evolve into richer hover card later
+    if (kind === 'action') {
+      b.title = spellTooltip(id, model.player);
+    } else if (kind === 'bonus') {
+      b.title = bonusTooltip(id, model.player);
+    }
     b.addEventListener("click", () => {
       if (kind === 'action') handlers.onAction?.(id);
       else handlers.onBonus?.(id);
@@ -86,6 +92,33 @@ export function updateActionBar(model){
 
   refs.dotAction.classList.toggle("empty", !(model.player.action > 0));
   refs.dotBonus.classList.toggle("empty",  !(model.player.bonus > 0));
+
+  // Movement button tooltip with rolled/remaining info
+  if (model.player.movementInfo){
+    const mi = model.player.movementInfo;
+    let parts = [];
+    if (mi.rolled != null) parts.push(`Rolled: ${mi.rolled}`);
+    parts.push(`Used: ${mi.used}`);
+    parts.push(`Remaining: ${mi.remaining}`);
+    refs.moveBtn.title = parts.join(" | ");
+  } else {
+    refs.moveBtn.title = "Roll movement (once) or spend remaining steps.";
+  }
+}
+
+// Simple tooltip text helpers (lightweight; real data could come from SpellRegistry)
+function spellTooltip(id, playerModel){
+  switch(id){
+    case 'burn': return 'Burn: Action. Apply a 3-tick 1 dmg DoT (stacks). If Inferno primed: detonate immediately.';
+    case 'inferno': return 'Inferno: Bonus. Prime to convert next Burn into instant damage + pulse. Click again to cancel.';
+    default: return id;
+  }
+}
+function bonusTooltip(id, playerModel){
+  switch(id){
+    case 'inferno': return spellTooltip(id, playerModel);
+    default: return id;
+  }
 }
 
 
