@@ -69,32 +69,99 @@ function maxManhattanToCorners(o, n){
  * Creates WoW Hellfire-style multiple concentric expanding rings.
  */
 export function runInfernoRing(origin, opts={}){
+  console.log("🔥 HELLFIRE HEATWAVE INITIATED!", origin, opts);
   const root = ensureFxRoot();
   if (!root) return;
   const gridN = state.grid?.cells ?? 15;
   const o = origin || { col: Math.ceil(gridN/2), row: Math.ceil(gridN/2) };
   
-  // Create single expanding ring like WoW Hellfire
-  const ringCount = 1;
-  const ringDelay = 150; // ms between rings
-  
-  for (let i = 0; i < ringCount; i++) {
+  // Micro-shake just the board for impact - not the entire UI
+  const boardEl = document.getElementById("board");
+  if (boardEl) {
+    boardEl.style.transform = 'translate(1px, 0.5px)';
     setTimeout(() => {
-      const ring = document.createElement("div");
-      ring.className = "fx-ring hellfire-ring";
-      
-      // Position at player location
-      ring.style.left = `calc(((${o.col} - 1) * 100%) / var(--grid-cells))`;
-      ring.style.top = `calc(((${o.row} - 1) * 100%) / var(--grid-cells))`;
-      
-      // Each ring has slightly different properties for variation
-      ring.style.setProperty('--ring-index', i);
-      
-      // Remove after animation completes
-      ring.addEventListener("animationend", () => ring.remove(), { once: true });
-      root.appendChild(ring);
-    }, i * ringDelay);
+      boardEl.style.transform = 'translate(-0.5px, -1px)';
+      setTimeout(() => {
+        boardEl.style.transform = 'translate(0.5px, 0.5px)';
+        setTimeout(() => {
+          boardEl.style.transform = '';
+        }, 50);
+      }, 50);
+    }, 50);
   }
+  
+  // Create ground scorch mark first
+  const scorch = document.createElement("div");
+  scorch.className = "ground-scorch";
+  scorch.style.left = `calc(((${o.col} - 1) * 100%) / var(--grid-cells))`;
+  scorch.style.top = `calc(((${o.row} - 1) * 100%) / var(--grid-cells))`;
+  root.appendChild(scorch);
+  
+  // Furnace door flash at caster's feet
+  const coreFlash = document.createElement("div");
+  coreFlash.className = "hellfire-core-flash";
+  coreFlash.style.left = `calc(((${o.col} - 1) * 100%) / var(--grid-cells))`;
+  coreFlash.style.top = `calc(((${o.row} - 1) * 100%) / var(--grid-cells))`;
+  root.appendChild(coreFlash);
+  
+  // Create leading dust shockwave ring first
+  const dustRing = document.createElement("div");
+  dustRing.className = "hellfire-dust-shockwave";
+  dustRing.style.left = `calc(((${o.col} - 1) * 100%) / var(--grid-cells))`;
+  dustRing.style.top = `calc(((${o.row} - 1) * 100%) / var(--grid-cells))`;
+  root.appendChild(dustRing);
+  
+  // Create ground lava painting effect (initial pulse)
+  const lavaGround = document.createElement("div");
+  lavaGround.className = "hellfire-lava-ground";
+  lavaGround.style.left = `calc(((${o.col} - 1) * 100%) / var(--grid-cells))`;
+  lavaGround.style.top = `calc(((${o.row} - 1) * 100%) / var(--grid-cells))`;
+  root.appendChild(lavaGround);
+  
+  // Create secondary lava pulse (follows dust ring closely)
+  setTimeout(() => {
+    const lavaSecondary = document.createElement("div");
+    lavaSecondary.className = "hellfire-lava-secondary";
+    lavaSecondary.style.left = `calc(((${o.col} - 1) * 100%) / var(--grid-cells))`;
+    lavaSecondary.style.top = `calc(((${o.row} - 1) * 100%) / var(--grid-cells))`;
+    root.appendChild(lavaSecondary);
+    
+    setTimeout(() => lavaSecondary.remove(), 1800);
+  }, 300); // Start much sooner to follow the dust ring
+  
+  // Create 3 concentric heat rings with organic wobble (following the dust wave)
+  for (let ring = 0; ring < 3; ring++) {
+    setTimeout(() => {
+      const heatRing = document.createElement("div");
+      heatRing.className = "hellfire-heat-ring";
+      heatRing.style.left = `calc(((${o.col} - 1) * 100%) / var(--grid-cells))`;
+      heatRing.style.top = `calc(((${o.row} - 1) * 100%) / var(--grid-cells))`;
+      heatRing.style.setProperty('--ring-index', ring);
+      root.appendChild(heatRing);
+      
+      // Create ember spray for this ring - optimized for performance
+      for (let i = 0; i < 16; i++) {
+        const ember = document.createElement("div");
+        ember.className = Math.random() > 0.7 ? "hellfire-ember-battlefield" : "hellfire-ember-long";
+        ember.style.left = `calc(((${o.col} - 0.5) * 100%) / var(--grid-cells))`;
+        ember.style.top = `calc(((${o.row} - 0.5) * 100%) / var(--grid-cells))`;
+        ember.style.setProperty("--angle", `${(i * 22.5) + Math.random() * 15}deg`);
+        ember.style.animationDelay = `${100 + ring * 120 + Math.random() * 100}ms`; // Start after dust wave begins
+        root.appendChild(ember);
+        
+        const emberLife = ember.className.includes('battlefield') ? 1600 : 1000;
+        setTimeout(() => ember.remove(), emberLife);
+      }
+      
+      setTimeout(() => heatRing.remove(), 1000);
+    }, 100 + ring * 120); // Slight delay after dust wave starts
+  }
+  
+  // Clean up core flash, dust ring, lava ground, and scorch
+  setTimeout(() => coreFlash.remove(), 200);
+  setTimeout(() => dustRing.remove(), 1500);
+  setTimeout(() => lavaGround.remove(), 1500); // Sync with dust ring
+  setTimeout(() => scorch.remove(), 4000);
 }
 
 // Burn effect functions
