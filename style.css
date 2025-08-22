@@ -12,6 +12,10 @@
 *{box-sizing:border-box;margin:0;padding:0}
 body{display:flex;flex-direction:column;height:100vh;background:var(--bg-dark);color:var(--text-main);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;-webkit-user-select:none;user-select:none}
 
+/* Action bar tooltip */
+#ab-tooltip{position:fixed; z-index:3000; pointer-events:none; background:#111; color:#e6e6eb; padding:6px 10px; border:1px solid #444; border-radius:8px; font-size:12px; line-height:1.2; opacity:0; transform:translateY(-4px); transition:opacity .12s ease, transform .12s ease; max-width:260px; box-shadow:0 4px 18px #000c, 0 0 0 1px #222 inset;}
+#ab-tooltip.visible{opacity:1; transform:translateY(0);}
+
 /* ---------- Modals / Cards ---------- */
 .modal{position:fixed; inset:0; z-index:1000; display:grid; place-items:center; background:rgba(0,0,0,.45)}
 .modal[hidden]{display:none}

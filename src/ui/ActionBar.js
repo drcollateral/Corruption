@@ -4,6 +4,34 @@
 let wired = false;
 let refs = null;
 let handlers = { onMove: ()=>{}, onAction: (id)=>{}, onBonus: (id)=>{}, onEndTurn: ()=>{} };
+let tooltipEl = null;
+
+function ensureTooltip(){
+  if (tooltipEl) return tooltipEl;
+  tooltipEl = document.createElement('div');
+  tooltipEl.id = 'ab-tooltip';
+  document.body.appendChild(tooltipEl);
+  return tooltipEl;
+}
+
+function showTooltip(target){
+  const tip = target.getAttribute('data-tip');
+  if (!tip) return;
+  const el = ensureTooltip();
+  el.textContent = tip;
+  el.classList.add('visible');
+  const rect = target.getBoundingClientRect();
+  const pad = 6;
+  const top = Math.max(4, rect.top - el.offsetHeight - 8);
+  let left = rect.left + rect.width/2 - el.offsetWidth/2;
+  left = Math.max(pad, Math.min(window.innerWidth - el.offsetWidth - pad, left));
+  el.style.top = top + 'px';
+  el.style.left = left + 'px';
+}
+
+function hideTooltip(){
+  if (tooltipEl) tooltipEl.classList.remove('visible');
+}
 
 export function mountActionBar(h){
   handlers = h || handlers;
@@ -43,6 +71,18 @@ export function mountActionBar(h){
   if (!wired){
     moveBtn.addEventListener("click", () => handlers.onMove?.());
     endBtn.addEventListener("click", () => handlers.onEndTurn?.()); // manual-only
+    // Delegated tooltip events
+    root.addEventListener('mouseover', (e) => {
+      const t = e.target;
+      if (t instanceof HTMLElement && t.closest('#action-bar button') && t.hasAttribute('data-tip')){
+        showTooltip(t);
+      }
+    });
+    root.addEventListener('mouseout', (e) => {
+      const t = e.target;
+      if (t instanceof HTMLElement && t.closest('#action-bar button')) hideTooltip();
+    });
+    window.addEventListener('scroll', hideTooltip, true);
     wired = true;
   }
 
@@ -67,11 +107,11 @@ export function updateActionBar(model){
     b.textContent = label + (enhanced ? " 🔥" : "");
     b.disabled = !enabled;
     if (enhanced) b.classList.add("enhanced");
-    // Basic tooltip via title; could evolve into richer hover card later
+    // Tooltip text via data attribute
     if (kind === 'action') {
-      b.title = spellTooltip(id, model.player);
+      b.setAttribute('data-tip', spellTooltip(id, model.player));
     } else if (kind === 'bonus') {
-      b.title = bonusTooltip(id, model.player);
+      b.setAttribute('data-tip', bonusTooltip(id, model.player));
     }
     b.addEventListener("click", () => {
       if (kind === 'action') handlers.onAction?.(id);
@@ -100,9 +140,9 @@ export function updateActionBar(model){
     if (mi.rolled != null) parts.push(`Rolled: ${mi.rolled}`);
     parts.push(`Used: ${mi.used}`);
     parts.push(`Remaining: ${mi.remaining}`);
-    refs.moveBtn.title = parts.join(" | ");
+    refs.moveBtn.setAttribute('data-tip', parts.join(' | '));
   } else {
-    refs.moveBtn.title = "Roll movement (once) or spend remaining steps.";
+    refs.moveBtn.setAttribute('data-tip', 'Roll movement (once) or spend remaining steps.');
   }
 }
 
