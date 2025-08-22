@@ -8,9 +8,75 @@
   --top-h:44px; --bottom-h:60px;
   --left-w:280px; --right-w:360px;
   --grid-cells:15;
+  
+  /* Affinity Colors - Based on actual game affinities */
+  /* Elementalist affinities */
+  --affinity-flame:#ff6b35; --affinity-flame-dim:#cc5429; --affinity-flame-bright:#ff8855;
+  --affinity-terra:#8bc34a; --affinity-terra-dim:#6f9c3b; --affinity-terra-bright:#a1d15a;
+  --affinity-tide:#4fc3f7; --affinity-tide-dim:#3f9bc4; --affinity-tide-bright:#6fcffa;
+  
+  /* Warrior affinities */
+  --affinity-brutality:#e53935; --affinity-brutality-dim:#b72c2a; --affinity-brutality-bright:#ea5c58;
+  --affinity-guardianship:#3f51b5; --affinity-guardianship-dim:#324192; --affinity-guardianship-bright:#5c6bc0;
+  --affinity-leadership:#ffc107; --affinity-leadership-dim:#cc9a06; --affinity-leadership-bright:#ffcd39;
+  
+  /* Survivalist affinities */
+  --affinity-lethality:#9c27b0; --affinity-lethality-dim:#7b1f8c; --affinity-lethality-bright:#b547c8;
+  --affinity-primalism:#795548; --affinity-primalism-dim:#5d4037; --affinity-primalism-bright:#8d6e63;
+  --affinity-natures-aid:#4caf50; --affinity-natures-aid-dim:#388e3c; --affinity-natures-aid-bright:#66bb6a;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{display:flex;flex-direction:column;height:100vh;background:var(--bg-dark);color:var(--text-main);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;-webkit-user-select:none;user-select:none}
+
+/* ========== Affinity Player Name Styling ========== */
+.player-name{font-weight:600;transition:color 0.2s ease}
+
+/* Elementalist affinities */
+.player-name.affinity-flame{color:var(--affinity-flame)}
+.player-name.affinity-terra{color:var(--affinity-terra)}
+.player-name.affinity-tide{color:var(--affinity-tide)}
+
+/* Warrior affinities */
+.player-name.affinity-brutality{color:var(--affinity-brutality)}
+.player-name.affinity-guardianship{color:var(--affinity-guardianship)}
+.player-name.affinity-leadership{color:var(--affinity-leadership)}
+
+/* Survivalist affinities */
+.player-name.affinity-lethality{color:var(--affinity-lethality)}
+.player-name.affinity-primalism{color:var(--affinity-primalism)}
+.player-name.affinity-natures-aid{color:var(--affinity-natures-aid)}
+
+/* Bright variants for highlighted/active states */
+.player-name.affinity-flame.active,.player-name.affinity-flame:hover{color:var(--affinity-flame-bright)}
+.player-name.affinity-terra.active,.player-name.affinity-terra:hover{color:var(--affinity-terra-bright)}
+.player-name.affinity-tide.active,.player-name.affinity-tide:hover{color:var(--affinity-tide-bright)}
+.player-name.affinity-brutality.active,.player-name.affinity-brutality:hover{color:var(--affinity-brutality-bright)}
+.player-name.affinity-guardianship.active,.player-name.affinity-guardianship:hover{color:var(--affinity-guardianship-bright)}
+.player-name.affinity-leadership.active,.player-name.affinity-leadership:hover{color:var(--affinity-leadership-bright)}
+.player-name.affinity-lethality.active,.player-name.affinity-lethality:hover{color:var(--affinity-lethality-bright)}
+.player-name.affinity-primalism.active,.player-name.affinity-primalism:hover{color:var(--affinity-primalism-bright)}
+.player-name.affinity-natures-aid.active,.player-name.affinity-natures-aid:hover{color:var(--affinity-natures-aid-bright)}
+
+/* Dim variants for inactive/disabled states */
+.player-name.affinity-flame.inactive{color:var(--affinity-flame-dim)}
+.player-name.affinity-terra.inactive{color:var(--affinity-terra-dim)}
+.player-name.affinity-tide.inactive{color:var(--affinity-tide-dim)}
+.player-name.affinity-brutality.inactive{color:var(--affinity-brutality-dim)}
+.player-name.affinity-guardianship.inactive{color:var(--affinity-guardianship-dim)}
+.player-name.affinity-leadership.inactive{color:var(--affinity-leadership-dim)}
+.player-name.affinity-lethality.inactive{color:var(--affinity-lethality-dim)}
+.player-name.affinity-primalism.inactive{color:var(--affinity-primalism-dim)}
+.player-name.affinity-natures-aid.inactive{color:var(--affinity-natures-aid-dim)}
+
+/* Background variants for badges and highlights */
+.affinity-bg-flame{background:var(--affinity-flame);color:var(--bg-dark)}
+.affinity-bg-tide{background:var(--affinity-tide);color:var(--bg-dark)}
+.affinity-bg-earth{background:var(--affinity-earth);color:var(--bg-dark)}
+.affinity-bg-storm{background:var(--affinity-storm);color:white}
+.affinity-bg-void{background:var(--affinity-void);color:white}
+.affinity-bg-light{background:var(--affinity-light);color:var(--bg-dark)}
+.affinity-bg-shadow{background:var(--affinity-shadow);color:white}
+.affinity-bg-blood{background:var(--affinity-blood);color:white}
 
 /* Action bar tooltip */
 #ab-tooltip{position:fixed; z-index:3000; pointer-events:none; background:#111; color:#e6e6eb; padding:6px 10px; border:1px solid #444; border-radius:8px; font-size:12px; line-height:1.2; opacity:0; transform:translateY(-4px); transition:opacity .12s ease, transform .12s ease; max-width:260px; box-shadow:0 4px 18px #000c, 0 0 0 1px #222 inset;}
@@ -71,7 +137,21 @@ button.primary:hover, .ghost:hover{filter:brightness(1.1)}
 /* ---------- App Layout ---------- */
 #top-bar{height:var(--top-h);flex:0 0 var(--top-h);background:var(--panel-bg);border-bottom:1px solid var(--line-bright);display:flex;align-items:stretch}
 #pill-bar{display:none}
-#turn-counter{flex:1;display:flex;align-items:center;padding:0 8px; gap:8px}
+#turn-counter{flex:1;display:flex;align-items:center;justify-content:space-between;padding:0 12px; gap:12px; border-radius:6px; background:var(--line-dim); min-height:32px}
+.turn-info{display:flex;align-items:center;gap:16px;flex:1;min-width:0}
+.round-display{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;flex-shrink:0}
+.round-display .label{opacity:0.7;font-size:12px}
+.round-display #round-number{color:var(--accent);font-weight:700;min-width:20px}
+.turn-sequence{display:flex;align-items:center;flex:1;min-width:0;overflow:hidden}
+.turn-queue{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;overflow-x:auto;padding:2px 0}
+.turn-item{display:flex;align-items:center;gap:4px;padding:3px 8px;border-radius:4px;font-size:12px;transition:all 0.2s ease;flex-shrink:0;white-space:nowrap}
+.turn-item.current{background:var(--panel-bg);border:1px solid var(--line-bright);font-weight:600}
+.turn-item.next{background:rgba(58,140,255,0.15);border:1px solid rgba(58,140,255,0.4)}
+.turn-item.upcoming{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15)}
+.turn-label{opacity:0.7;font-size:11px}
+.turn-name{font-weight:600}
+.turn-name.enemy-turn{color:var(--danger)}
+/* Player turn names will use affinity-specific colors via .player-name class */
 #xp-bar{display:flex;width:100%;height:18px;border:1px solid var(--line-bright);border-radius:0;overflow:hidden;background:#101015;position:relative}
 #xp-bar.overtime{border-color:var(--danger)}
 .xp-segment{flex:1 1 0;background:var(--line-dim);border-right:1px solid #0a0a0d}

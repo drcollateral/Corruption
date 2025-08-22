@@ -4,7 +4,23 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Corruption Game Web UI</title>
+  <title>Cor      <div id="turn-counter" aria-label="Turn counter">
+        <div class="turn-info">
+          <div class="round-display">
+            <span class="label">Round</span>
+            <span id="round-number">1</span>
+          </div>
+          <div class="turn-order">
+            <div class="active-turn" id="active-turn-display">
+              <span class="turn-label">Turn:</span>
+              <span id="current-turn">Player</span>
+            </div>
+          </div>
+        </div>
+        <div class="top-actions">
+          <button id="btn-boss-deck" class="ghost" hidden>Boss Deck</button>
+        </div>
+      </div>ame Web UI</title>
   <link rel="stylesheet" href="style.css?v=21"/>
   <!-- Inline 1px favicon to avoid 404s -->
   <link rel="icon" href="data:;base64,iVBORw0KGgo=">
@@ -179,12 +195,19 @@ http://127.0.0.1:5500/index.html</code></pre>
         <span class="pill">P4</span>
       </nav>
       <div id="turn-counter" aria-label="Turn counter">
-        <div id="xp-bar">
-          <div class="xp-segment"></div><div class="xp-segment"></div><div class="xp-segment"></div><div class="xp-segment"></div><div class="xp-segment"></div>
-          <div class="xp-segment"></div><div class="xp-segment"></div><div class="xp-segment"></div><div class="xp-segment"></div><div class="xp-segment"></div>
+        <div class="turn-info">
+          <div class="round-display">
+            <span class="label">Round</span>
+            <span id="round-number">1</span>
+          </div>
+          <div class="turn-sequence">
+            <div class="turn-queue" id="turn-queue">
+              <!-- Turn items will be dynamically generated -->
+            </div>
+          </div>
         </div>
         <div class="top-actions">
-          <button id="btn-boss-deck" class="ghost">Boss Deck</button>
+          <button id="btn-boss-deck" class="ghost" hidden>Boss Deck</button>
         </div>
       </div>
     </header>

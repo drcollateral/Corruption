@@ -28,7 +28,6 @@ export function renderBossPanel(){
   kv.innerHTML = `
     <div>Name</div><div>${esc(b.name)}</div>
     <div>HP</div><div>${b.hp}/${b.hpMax}</div>
-    <div>Round</div><div>${state.round ?? 1}</div>
   `;
 
   // Render combat log from state (persisted across re-renders)

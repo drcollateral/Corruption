@@ -3,6 +3,7 @@
 import { state } from "../core/GameState.js";
 import { renderCharacterSheet, renderBag, renderSpellbook } from "./CharacterSheet.js";
 import { renderBossPanel } from "./BossPanel.js";
+import { AffinityColors } from "../utils/AffinityColors.js";
 
 export function renderParty(){
   const left = document.getElementById("left-party");
@@ -20,8 +21,13 @@ export function renderParty(){
     
     const div = document.createElement("div");
     div.className = "party-card";
+    
+    // Create player name with affinity colors
+    const nameSpan = AffinityColors.createPlayerNameElement(p, idx === state.activeIdx ? 'active' : 'normal');
+    const activeIndicator = idx === state.activeIdx ? " • (active)" : "";
+    
     div.innerHTML = `
-      <div class="card-title">${p.name} ${idx===state.activeIdx ? "• (active)" : ""}</div>
+      <div class="card-title"></div>
       <div class="hp-bar">
         <span class="hp-text" style="color: ${hpColor}">${hp}/${hpMax} HP</span>
         <div class="hp-bar-bg">
@@ -33,6 +39,12 @@ export function renderParty(){
         <button class="icon-button" data-act="bag" data-id="${p.id}">🎒 Bag</button>
         <button class="icon-button" data-act="spells" data-id="${p.id}">📖 Spellbook</button>
       </div>`;
+    
+    // Insert the styled name
+    const cardTitle = div.querySelector('.card-title');
+    cardTitle.appendChild(nameSpan);
+    cardTitle.insertAdjacentText('beforeend', activeIndicator);
+    
     left.appendChild(div);
   });
   left.querySelectorAll("[data-act=sheet]").forEach(btn=>{

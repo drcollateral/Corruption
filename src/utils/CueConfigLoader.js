@@ -145,9 +145,33 @@ function findCueConfig(text) {
 }
 
 // Enhanced cue function that uses configuration
-export function configuredCue(text, options = {}) {
-  const config = findCueConfig(text);
+export function configuredCue(textOrKey, options = {}) {
+  let config = null;
+  let text = textOrKey;
   const timestamp = new Date().toLocaleTimeString();
+  
+  // First try to find by exact key lookup
+  if (cueConfig && cueConfig[textOrKey]) {
+    config = { ...cueConfig[textOrKey], key: textOrKey };
+    
+    // If we have a template with placeholders, process it
+    if (config.message && config.message.includes('{')) {
+      text = config.message;
+      // Replace template placeholders with values from options
+      Object.keys(options).forEach(key => {
+        const placeholder = `{${key}}`;
+        if (text.includes(placeholder)) {
+          text = text.replace(new RegExp(placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), options[key]);
+        }
+      });
+    } else if (config.message) {
+      text = config.message;
+    }
+  } else {
+    // Fallback to original text-based lookup
+    config = findCueConfig(textOrKey);
+    text = textOrKey;
+  }
   
   if (config) {
     // Check if this cue is disabled

@@ -17,6 +17,7 @@ import { events, store } from "../core/EventBus.js";
 import { simpleCue } from "../utils/SimpleCue.js";
 import { animationScheduler } from "../utils/AnimationScheduler.js";
 import { renderParty } from "../ui/PartyPanel.js";
+import { turnTracker } from "../utils/TurnTracker.js";
 
 // Debug logging helpers - only log if appropriate flags are enabled
 function debugCombatLog(...args) {
@@ -590,16 +591,28 @@ function endTurnInternal(){
   state.turnPtr = (state.turnPtr + 1) % len;
   if (state.turnPtr === 0) {
     state.round += 1;
+    
+    // Update turn tracker with new round
+    turnTracker.setRound(state.round);
+    
     const { wait } = configuredCue(`Round ${state.round} begins.`, { clickToContinue: true });
     // Note: Don't await here as this should be non-blocking
     // Removed incorrect Inferno animation at round start.
   }
+  
+  // Update turn tracker with current turn
+  updateTurnTracker();
+  
   beginTurnAtCurrentPtr();
 }
 
 function beginTurnAtCurrentPtr(){
   const slot = state.turnOrder[state.turnPtr];
   if (!slot) return;
+  
+  // Update turn tracker display
+  updateTurnTracker();
+  
   if (slot.kind === 'boss'){
     state.isPlayerTurn = false;
   // Remove active outline from players during boss turn
@@ -1308,6 +1321,32 @@ export function startCaveCombat(){
       entries.sort((a,b)=> (b.roll - a.roll) || (b.tb - a.tb));
       state.turnOrder = entries.map(e=> e.kind==='player' ? { kind:'player', idx:e.idx } : { kind:'boss' });
       state.turnPtr = 0; // first in order
+      
+      // Setup turn tracker with entities
+      const turnOrderEntities = state.turnOrder.map(entry => {
+        if (entry.kind === 'player') {
+          const p = state.players[entry.idx];
+          return {
+            id: `player-${entry.idx}`,
+            name: p.name,
+            type: 'player',
+            isPlayer: true,
+            affinity: p.affinity || p.class || 'void', // Include affinity info
+            class: p.class,
+            element: p.element
+          };
+        } else {
+          return {
+            id: 'boss',
+            name: state.boss.name,
+            type: 'boss',
+            isPlayer: false
+          };
+        }
+      });
+      turnTracker.setTurnOrder(turnOrderEntities);
+      turnTracker.setRound(state.round || 1);
+      
       // Show turn order - click will advance; AFTER click we clear entire initiative stack
       const orderText = state.turnOrder.map((entry, i) => {
         if (entry.kind === 'player') {
@@ -1529,6 +1568,26 @@ function startPlayerMovement(){
       syncUI(); 
     }
   });
+}
+
+// Helper function to update turn tracker display
+function updateTurnTracker() {
+  if (!state.turnOrder || state.turnOrder.length === 0) return;
+  
+  const currentSlot = state.turnOrder[state.turnPtr];
+  if (!currentSlot) return;
+  
+  // Update the current turn indicator
+  if (currentSlot.kind === 'player') {
+    const player = state.players[currentSlot.idx];
+    if (player) {
+      turnTracker.currentTurnIndex = state.turnPtr;
+      turnTracker.updateDisplay();
+    }
+  } else if (currentSlot.kind === 'boss') {
+    turnTracker.currentTurnIndex = state.turnPtr;
+    turnTracker.updateDisplay();
+  }
 }
 
 
