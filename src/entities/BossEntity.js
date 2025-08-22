@@ -74,15 +74,21 @@ export class BossEntity {
   
   // Status effects
   addStatus(status) {
+    // For burn (and future multi-stack DoTs), keep separate instances; else merge by kind
+    if (status.kind === 'burn') {
+      this.statuses.push({ ...status });
+      this.onStatusAdded(status);
+      return;
+    }
     const existing = this.statuses.find(s => s.kind === status.kind);
     if (existing) {
-      // Stack or refresh existing status
       existing.remaining = Math.max(existing.remaining || 0, status.remaining || 0);
       existing.amount = (existing.amount || 0) + (status.amount || 0);
+      this.onStatusAdded(status); // still notify for UI even when merged
     } else {
       this.statuses.push({ ...status });
+      this.onStatusAdded(status);
     }
-    this.onStatusAdded(status);
   }
   
   removeStatus(kind) {
@@ -141,8 +147,22 @@ export class BossEntity {
   }
   
   intersects(col, row) {
-    return (col >= this.col && col < this.col + this.w &&
+    const result = (col >= this.col && col < this.col + this.w &&
             row >= this.row && row < this.row + this.h);
+    
+    console.log(`🎯 BossEntity.intersects(${col}, ${row}):`, {
+      bossPos: { col: this.col, row: this.row },
+      bossSize: { w: this.w, h: this.h },
+      checkRange: { 
+        colMin: this.col, 
+        colMax: this.col + this.w - 1,
+        rowMin: this.row,
+        rowMax: this.row + this.h - 1
+      },
+      result
+    });
+    
+    return result;
   }
   
   isAdjacentTo(target) {

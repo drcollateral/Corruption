@@ -2,7 +2,9 @@
 // Observer system for boss events - handles visual effects and UI updates
 
 import { updateBurnOverlayPositions, removeBurnDebuffOverlay, addBurnDebuffOverlay, playBurnTick } from "./EffectSystem.js";
-import { syncBossPanel } from "../ui/BossPanel.js";
+import { syncBossPanel, bossLog } from "../ui/BossPanel.js";
+import { cueService } from "../utils/CueService.js";
+import { isDotKind } from "../data/DamageTypes.js";
 import { state } from "../core/GameState.js";
 
 export class BossVisualEffectsObserver {
@@ -93,7 +95,14 @@ export class BossVisualEffectsObserver {
     // Show floating damage number
     this.showDamageNumber(boss, amount, source);
     
-    console.log(`${boss.name} took ${amount} damage from ${source?.name || 'unknown'}`);
+    const srcName = source?.name || (typeof source === 'object' && source.kind) || 'unknown';
+    const line = `${boss.name} took ${amount} damage from ${srcName}`;
+    console.log(line);
+    bossLog(line);
+    // If burn damage, surface an explicit cue so player knows to click to advance if flow is paused
+    if (isDotKind(srcName)) {
+      cueService.clickToContinue(`${boss.name} takes ${amount} ${srcName.charAt(0).toUpperCase()+srcName.slice(1)} damage.`);
+    }
   }
   
   // Show floating damage number above the boss

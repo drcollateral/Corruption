@@ -136,7 +136,22 @@ function wireTips(){
 // Public API: append a line to the combat log under boss panel
 export function bossLog(line){
   if (!Array.isArray(state.combatLog)) state.combatLog = [];
-  state.combatLog.push(String(line ?? ""));
+  
+  // Add timestamp (accurate to 1/10th of a second)
+  const now = new Date();
+  const timestamp = now.toLocaleTimeString('en-US', { 
+    hour12: false, 
+    hour: '2-digit', 
+    minute: '2-digit', 
+    second: '2-digit' 
+  }) + '.' + Math.floor(now.getMilliseconds() / 100);
+  
+  const logEntry = `[${timestamp}] ${String(line ?? "")}`;
+  state.combatLog.push(logEntry);
+  
+  // Also log to browser console with timestamp
+  console.log(`🎮 COMBAT [${timestamp}]: ${String(line ?? "")}`);
+  
   // Trim to a reasonable length
   if (state.combatLog.length > 200) state.combatLog.splice(0, state.combatLog.length - 200);
 
@@ -145,7 +160,7 @@ export function bossLog(line){
   if (elLog){
     const div = document.createElement('div');
     div.className = 'log-line';
-    div.textContent = String(line ?? '');
+    div.textContent = logEntry;
     elLog.appendChild(div);
     elLog.scrollTop = elLog.scrollHeight;
   }

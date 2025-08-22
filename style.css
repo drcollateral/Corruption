@@ -66,14 +66,20 @@ button.primary:hover, .ghost:hover{filter:brightness(1.1)}
   border: 1px solid transparent;
   transition: all 0.2s ease;
   cursor: pointer;
+  /* Tiles sit below tokens so sprites render above highlights */
+  z-index: 80; /* was implicitly above tokens before (150/200); reduced */
 }
 
-.token{position:absolute; border-radius:2px; box-shadow:0 0 0 1px #000a inset, 0 1px 2px #0008; z-index: var(--token-z, 1)}
-.token.active{outline:2px solid #fff9; z-index: calc(var(--token-z, 1) + 1)} /* Active token only gets +1 boost, preserving row-based stacking */
+.token{position:absolute; border-radius:2px; box-shadow:0 0 0 1px #000a inset, 0 1px 2px #0008; 
+  /* Raise tokens above tiles/highlights; allow row-based layering via --token-z if set elsewhere */
+  z-index: calc(200 + var(--token-z, 0));
+  pointer-events: none; /* let underlying tiles receive clicks for targeting/movement */
+}
+.token.active{outline:2px solid #fff9; z-index: calc(201 + var(--token-z, 0))} /* Active token tiny bump */
 .token.label::after{content:attr(data-name); position:absolute; left:2px; top:2px; font-size:10px; color:#fff; text-shadow:0 1px 2px #000a}
 .token.player{background: transparent; border: none; overflow: visible;}
-.token.boss{background:transparent;} /* Boss token background transparent; sprite provides art. Z-index managed by --token-z */
-.token .sprite-layer{position:absolute; left:50%; bottom:0; transform:translateX(-50%); pointer-events:none; background-repeat:no-repeat; background-position:center bottom}
+.token.boss{background:transparent; pointer-events: none !important;} /* Boss token background transparent; sprite provides art. Z-index managed by --token-z */
+.token .sprite-layer{position:absolute; left:50%; bottom:0; transform:translateX(-50%); pointer-events:none !important; background-repeat:no-repeat; background-position:center bottom; z-index: auto;}
 .token.entrance{background:#202040; box-shadow:0 0 0 2px var(--accent) inset, 0 0 8px 2px #3a8cff44}
 .token.cave{background:#151520}
 .token.size-1x1{width:calc(100%/var(--grid-cells));height:calc(100%/var(--grid-cells))}
@@ -483,9 +489,6 @@ button.primary:hover, .ghost:hover{filter:brightness(1.1)}
 @keyframes urgentBlink {
   0%, 100% { opacity: 0.8; }
   50% { opacity: 1; }
-}
-  0%, 100% { opacity: 0.4; }
-  50% { opacity: 0.8; }
 }
 
 @keyframes popfade{0%{opacity:0; transform:translateY(-6px)} 10%{opacity:1; transform:translateY(0)} 80%{opacity:1} 100%{opacity:0}}
@@ -912,23 +915,63 @@ button.primary:hover, .ghost:hover{filter:brightness(1.1)}
 
 /* ---------- Tile Highlighting ---------- */
 .tile.highlight-move {
+  cursor: pointer !important;
+  pointer-events: auto !important;
+  /* keep below tokens (>=200) but above base tiles for clarity */
+  z-index: 90 !important;
+}
+
+/* Visual highlight effect for movement that appears UNDER sprites */
+.tile.highlight-move::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   background: rgba(58, 140, 255, 0.3) !important;
   border: 2px solid #3a8cff !important;
   box-shadow: 
     0 0 0 1px #3a8cffaa inset,
     0 0 12px #3a8cff44 !important;
   animation: movePulse 2s infinite ease-in-out;
-  z-index: 10;
+  z-index: -1; /* stays beneath token due to tile lower stacking */
+  border-radius: 2px;
+  pointer-events: none; /* Pseudo-element doesn't interfere with clicking */
+}
+
+/* Tile elements for highlighting and clicking */
+/* (override earlier generic .tile if loaded twice) ensure lower z-index than tokens */
+.tile {
+  pointer-events: auto !important;
+  z-index: 80 !important;
+  background: transparent !important;
+  border: none !important;
 }
 
 .tile.highlight-target {
-  background: rgba(163, 48, 48, 0.3) !important;
+  cursor: crosshair !important;
+  pointer-events: auto !important;
+  z-index: 95 !important; /* below tokens (>=200) but above base tiles */
+}
+
+/* Visual highlight effect that appears UNDER sprites */
+.tile.highlight-target::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(163, 48, 48, 0.4) !important;
   border: 2px solid #a33030 !important;
   box-shadow: 
     0 0 0 1px #a33030aa inset,
     0 0 12px #a3303044 !important;
   animation: targetPulse 1.5s infinite ease-in-out;
-  z-index: 10;
+  z-index: -1; /* below token due to tile stacking */
+  border-radius: 2px;
+  pointer-events: none; /* Pseudo-element doesn't interfere with clicking */
 }
 
 @keyframes movePulse {
@@ -955,6 +998,112 @@ button.primary:hover, .ghost:hover{filter:brightness(1.1)}
       0 0 0 1px #a33030ff inset,
       0 0 18px #a3303066;
   }
+}
+
+/* Boss Panel Styles */
+.boss-panel, #boss-panel {
+  display: block !important;
+  visibility: visible !important;
+}
+
+.boss-panel .hpbar {
+  width: 100%;
+  height: 20px;
+  background: var(--line-dim);
+  border-radius: 10px;
+  overflow: hidden;
+  margin: 8px 0;
+  position: relative;
+}
+
+.boss-panel .hpfill {
+  height: 100%;
+  background: var(--danger);
+  transition: width 0.3s ease;
+  border-radius: 10px;
+}
+
+.boss-panel .status-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 8px 0;
+}
+
+.boss-panel .status-chip {
+  background: var(--warn);
+  color: var(--bg-dark);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.boss-panel .status-chip.burn {
+  background: var(--danger);
+  color: #fff;
+}
+
+.boss-panel .combat-log {
+  background: var(--bg-dark);
+  border: 1px solid var(--line-dim);
+  border-radius: 4px;
+  padding: 8px;
+  max-height: 150px;
+  overflow-y: auto;
+  margin-top: 8px;
+}
+
+.boss-panel .log-line {
+  color: var(--text-dim);
+  font-size: 12px;
+  margin-bottom: 4px;
+  padding: 2px 0;
+  border-bottom: 1px solid var(--line-dim);
+}
+
+.boss-panel .log-line:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.boss-panel .deck-list {
+  list-style: none;
+  padding: 0;
+  margin: 4px 0;
+}
+
+.boss-panel .deck-item {
+  background: var(--panel-bg);
+  border: 1px solid var(--line-dim);
+  border-radius: 4px;
+  padding: 4px 6px;
+  margin: 2px 0;
+  font-size: 11px;
+}
+
+.boss-panel .tip-bar {
+  background: var(--bg-dark);
+  border: 1px solid var(--line-dim);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: var(--text-dim);
+  min-height: 20px;
+}
+
+.boss-panel .tip-bar.empty {
+  font-style: italic;
+  opacity: 0.7;
+}
+
+#dock-panel, .panel {
+  display: block !important;
+  visibility: visible !important;
+}
+
+#right-dock {
+  display: block !important;
+  visibility: visible !important;
 }
 
 

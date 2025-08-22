@@ -4,9 +4,9 @@ import { state, isCellBlocked } from "../core/GameState.js";
 import { spellsFor, passivesFor, ATTRIBUTE_SPELLS, SPELL_ID_ALIASES } from "../data/SpellRegistry.js";
 import { mountActionBar, updateActionBar } from "../ui/ActionBar.js";
 import { renderBossPanel, syncBossPanel, bossLog } from "../ui/BossPanel.js";
-import { beginTargeting, cancelTargeting, isTargeting, beginTileSelection } from "../systems/TargetingSystem.js?v=24";
+import { beginTargeting, cancelTargeting, isTargeting, beginTileSelection, beginSimpleTargeting } from "../systems/TargetingSystem.js?v=24";
 import { runInfernoRing, playBurnApplication, addBurnDebuffOverlay, playBurnTick, removeBurnDebuffOverlay, updateBurnOverlayPositions } from "../systems/EffectSystem.js";
-import { addBuff, hasBuff, consumeBuff, getBuff, tickBuffs } from "../systems/BuffSystem.js";
+import { addBuff, hasBuff, consumeBuff, getBuff, tickBuffs, clearBuff } from "../systems/BuffSystem.js";
 import { BossFactory, BossEntity } from "../entities/BossEntity.js";
 import { updatePlayerSpriteDirection } from "../data/PlayerSprites.js";
 import { setupBossObservers } from "../systems/BossObservers.js";
@@ -20,6 +20,52 @@ import { renderParty } from "../ui/PartyPanel.js";
 let combatEventQueue = [];
 let isProcessingEvents = false;
 let combatEventClickHandler = null;
+
+// Active targeting state for spell/action cancellation
+let activeTargeting = null;
+let currentTargetingCleanup = null; // Store cleanup function for active targeting
+
+// Enhanced cleanup function for all targeting states
+function clearAllTargeting() {
+  console.log('🎮 COMBAT [' + new Date().toLocaleTimeString() + '.' + Math.floor(Date.now() % 1000 / 100) + '] Clearing all targeting');
+  
+  // Clear visual highlights from all tiles
+  document.querySelectorAll('.tile').forEach(tile => {
+    tile.classList.remove('highlight-target', 'highlight-move');
+  });
+  
+  // Clear active targeting state
+  activeTargeting = null;
+  
+  // Clear movement state
+  if (state.pendingSteps > 0) {
+    state.pendingSteps = 0;
+    cueService.remove('movement-prompt');
+  }
+  
+  // Remove any stored event listeners
+  if (currentTargetingCleanup) {
+    currentTargetingCleanup();
+    currentTargetingCleanup = null;
+  }
+  
+  // Remove document-level event listeners that might be lingering
+  document.removeEventListener('keydown', handleTargetingEscapeKey);
+}
+
+// Handle escape key for targeting cancellation
+function handleTargetingEscapeKey(event) {
+  if (event.key === 'Escape' && (activeTargeting || state.pendingSteps > 0)) {
+    clearAllTargeting();
+    cue("Action cancelled.");
+    syncUI();
+  }
+}
+
+function clearActiveTargeting() {
+  // Use the comprehensive cleanup function
+  clearAllTargeting();
+}
 
 function queueCombatEvent(eventFn, delay = 800, description = "", autoAdvance = false) {
   combatEventQueue.push({ eventFn, delay, description, autoAdvance });
@@ -93,7 +139,7 @@ function ensurePlayerVitals(p){
   if (typeof p.hitDie !== "number") p.hitDie = 6;
   if (typeof p.hpMax !== "number") p.hpMax = p.hitDie * 2;
   if (typeof p.hp !== "number") p.hp = p.hpMax;
-  if (!p.turn) p.turn = { action: 1, bonus: 1, moved: 0 };
+  if (!p.turn) p.turn = { action: 1, bonus: 1, bonusMax: 1, moved: 0 };
 }
 
 function resolveSpellId(id){
@@ -165,14 +211,15 @@ function cue(text, className=""){
 function categorizeCueByContent(text) {
   const lowerText = text.toLowerCase();
   
-  // Error conditions that need user attention
+  // Error conditions - make them quick feedback instead of sticky so they auto-dismiss
   if (lowerText.includes('not your turn') || 
       lowerText.includes('no actions left') || 
       lowerText.includes('no valid target') || 
       lowerText.includes('cannot use') ||
       lowerText.includes('has no attack spells') ||
+      lowerText.includes('target misses') ||
       lowerText.includes('already primed')) {
-    return 'error';
+    return 'quick-feedback'; // Changed from 'error' to auto-dismiss
   }
   
   // Quick feedback messages (shorter than general)
@@ -233,7 +280,7 @@ function syncUI(){
   const bonusSpells = allSpells.filter(s => s.actionType === 'bonus');
   const bonuses = [...bonusSpells];
   const canCastBurn = state.isPlayerTurn && hasSpell(p, "burn") && p.turn.action > 0 && !isTargeting();
-  const canMove = state.isPlayerTurn && (p.turn.moved === 0);
+  const canMove = state.isPlayerTurn && (p.turn.remainingMovement > 0 || p.turn.moved === 0); // Allow movement if points remain or haven't moved yet
   updateActionBar({
     inCombat: state.mode === "combat",
     player: {
@@ -241,12 +288,13 @@ function syncUI(){
       action: p.turn.action, bonus: p.turn.bonus,
       canMove,
       canBurn: canCastBurn,
-      canInferno: state.isPlayerTurn && hasSpell(p, "inferno") && p.turn.bonus > 0 && !isTargeting() && !hasInfernoActive,
+  // Allow toggling OFF even with 0 bonus remaining (refund handled in castInferno)
+  canInferno: state.isPlayerTurn && hasSpell(p, "inferno") && !isTargeting() && (p.turn.bonus > 0 || hasInfernoActive),
       canEndTurn: state.isPlayerTurn,
       hasInferno: hasInfernoActive,
     },
     actions: actions.map(s => ({ id:s.id, name:s.name, enabled: state.isPlayerTurn && p.turn.action>0 && !isTargeting() })),
-    bonuses: bonuses.map(bs => ({ id:bs.id, name:bs.name, enabled: state.isPlayerTurn && p.turn.bonus>0 && !isTargeting() && (bs.id!=="inferno" || !hasInfernoActive) })),
+  bonuses: bonuses.map(bs => ({ id:bs.id, name:bs.name, enabled: state.isPlayerTurn && !isTargeting() && (bs.id==="inferno" ? (p.turn.bonus>0 || hasInfernoActive) : p.turn.bonus>0) })),
     boss: { name: state.boss?.name ?? "—", hp: state.boss?.hp ?? 0, hpMax: state.boss?.hpMax ?? 0 },
   });
   syncBossPanel();
@@ -266,42 +314,97 @@ function targetAndCastBurn(){
   }
   if (p.turn.action <= 0) { cue(`${p.name} has no actions left.`); return; }
 
-  // Toggle: second click cancels targeting
-  if (isTargeting()){
-    cancelTargeting(); cue("Targeting cancelled."); syncUI(); return;
+  // Clear any pending movement before starting burn targeting
+  if (state.pendingSteps > 0) {
+    console.log('Clearing pending movement before burn targeting');
+    state.pendingSteps = 0;
+    cueService.remove('movement-prompt');
   }
 
+  // Toggle: second click cancels targeting
+  if (activeTargeting === 'burn'){
+    clearActiveTargeting(); 
+    cue("Burn targeting cancelled."); 
+    syncUI(); 
+    return;
+  }
+
+  activeTargeting = 'burn';
   const origin = { col: p.col, row: p.row };
-  const okTile = (c,r) => intersectsBoss(c,r);
-  beginTargeting({
+  
+  console.log('Starting burn targeting from:', origin);
+  console.log('Boss position:', state.boss ? { col: state.boss.col, row: state.boss.row, w: state.boss.w, h: state.boss.h } : 'NO BOSS');
+  
+  // Add escape key listener for this targeting session
+  document.addEventListener('keydown', handleTargetingEscapeKey);
+  
+  const targetingResult = beginSimpleTargeting({
     range: 7,
     origin,
-    canTarget: okTile,
+  distanceMetric: 'dnd35', // apply optional 5/10 alternating diagonal cost for spell range
+    canTarget: (col, row) => {
+      // Allow targeting ANY tile within range - we'll check if it hits the boss when selected
+      return true;
+    },
     onSelect: ({col,row}) => {
-      if (!okTile(col,row)){ cue("No valid target."); return; }
+      console.log(`Burn target selected at ${col}, ${row}`);
+      clearActiveTargeting();
       
-      // Burn only (no immediate pulse - will pulse at turn start if Inferno stacks exist)
+      // Check if the selected tile would hit the boss
+      const hitsBoss = intersectsBoss(col, row);
+      console.log(`Selected tile ${col}, ${row} hits boss: ${hitsBoss}`);
+      
+      if (!hitsBoss){ 
+        cue("Target misses - no valid target at that location."); 
+        return; 
+      }
+      
+      // Apply burn effect
       applyBurnFrom(p);
       cue(`${p.name} casts Burn on ${state.boss.name}.`);
+      bossLog(`${p.name} casts Burn on ${state.boss.name}.`);
       
       p.turn.action -= 1;
       syncUI();
     },
-    onCancel: () => { syncUI(); }
+    onCancel: () => { 
+      clearActiveTargeting();
+      cue("Burn targeting cancelled.");
+      syncUI(); 
+    },
+    onInvalidTarget: () => {
+      // This shouldn't happen since we allow all tiles in range
+      cue("Invalid target.");
+    }
   });
+  
+  // Store the cleanup function for manual cancellation
+  if (targetingResult && targetingResult.cleanup) {
+    currentTargetingCleanup = targetingResult.cleanup;
+  }
+  
+  cue("Select a target for Burn...");
+  bossLog(`${p.name} begins targeting for Burn spell.`);
+  syncUI();
 }
 
 function castInferno(){
   const p = currentPlayer();
   if (!state.isPlayerTurn) { cue("Not your turn."); return; }
   if (!hasSpell(p, "inferno")) { cue(`${p.name} cannot use Inferno.`); return; }
-  if (p.turn.bonus <= 0) { cue(`${p.name} has no bonus actions left.`); return; }
-  if (hasBuff(p, 'inferno_primed')) { cue(`Inferno already primed.`); return; }
-
-  addBuff(p, 'inferno_primed', { stacks: 1 });
-  p.turn.bonus -= 1;
-
-  cue(`${p.name} primes Inferno: Burn will detonate immediately and pulse for 2.`);
+  if (hasBuff(p, 'inferno_primed')) {
+    // Toggle off (refund bonus action if not already spent this toggle cycle)
+    clearBuff(p, 'inferno_primed');
+  // Refund up to original max
+  const max = Math.max(1, p.turn.bonusMax || 1);
+  if (p.turn.bonus < max) p.turn.bonus = Math.min(max, p.turn.bonus + 1);
+  cue(`${p.name} dismisses Inferno priming.`);
+  } else {
+    if (p.turn.bonus <= 0) { cue(`${p.name} has no bonus actions left.`); return; }
+    addBuff(p, 'inferno_primed', { stacks: 1 });
+    p.turn.bonus -= 1;
+    cue(`${p.name} primes Inferno: next Burn converts its 3 ticks to immediate damage and pulses.`);
+  }
   syncUI();
 }
 
@@ -326,8 +429,21 @@ function handleBonusButton(id){
 }
 
 function intersectsBoss(col,row){
-  if (!state.boss) return false;
-  return state.boss.intersects(col, row);
+  if (!state.boss) {
+    console.log(`❌ intersectsBoss(${col}, ${row}): NO BOSS`);
+    return false;
+  }
+  
+  const result = state.boss.intersects(col, row);
+  const bossInfo = `Boss at (${state.boss.col}, ${state.boss.row}) size ${state.boss.w}x${state.boss.h}`;
+  
+  if (result) {
+    console.log(`✅ intersectsBoss(${col}, ${row}): TRUE - ${bossInfo}`);
+  } else {
+    console.log(`❌ intersectsBoss(${col}, ${row}): FALSE - ${bossInfo}`);
+  }
+  
+  return result;
 }
 
 function triggerInfernoPulse(caster){
@@ -373,19 +489,13 @@ function applyBurnFrom(p){
   
   // Play burn application animation on boss
   playBurnApplication(state.boss.col, state.boss.row, state.boss.w, state.boss.h);
-  
-  // Immediate application damage (always 1 on application)
-  const baseDamage = 1;
-  state.boss.takeDamage(baseDamage, p);
-  // Visual feedback from damage number, no cue needed
-
-  const pow = p.attrs?.POW ?? 8;
-  const dur = Math.max(0, abilityMod(pow));
-  const tickAmount = 1;
+  // Nerf: remove on-application damage. Each Burn stack = 3 total ticks of 1.
+  const tickAmount = 1; // damage per tick per stack
+  const fixedTicks = 3; // total ticks each stack will deal
 
   if (infernoPrimed) {
-    // Detonate the freshly-applied Burn immediately
-    const detonate = tickAmount * dur;
+    // Detonate the would-be future ticks immediately (3 total)
+    const detonate = tickAmount * fixedTicks;
     if (detonate > 0) {
       state.boss.takeDamage(detonate, p);
       cue(`Inferno detonates Burn for ${detonate} immediate damage.`);
@@ -404,17 +514,32 @@ function applyBurnFrom(p){
     state.boss.addStatus({ 
       kind: "burn", 
       amount: tickAmount, 
-      remaining: dur, 
+      remaining: fixedTicks, // ticks remaining; damage applied before decrement each boss turn
       source: p.name ?? p.id 
     });
-    
-    cue(`Boss is burning! (${dur} turns)`);
+    cue(`Boss is burning! (3 turns)`);
   }
   syncBossPanel();
 }
 
 /* ------------------------ Turn & Boss Phase ------------------------ */
 function endTurnInternal(){
+  // Clear any active targeting when turn ends
+  if (activeTargeting) {
+    console.log('Turn ending - clearing active targeting:', activeTargeting);
+    clearActiveTargeting();
+  }
+  
+  // Clear movement penalties at end of turn (after they've been applied)
+  const currentPlayerSlot = state.turnOrder[state.turnPtr];
+  if (currentPlayerSlot && currentPlayerSlot.kind === 'player') {
+    const p = state.players[currentPlayerSlot.idx];
+    if (p && p.nextMovePenalty) {
+      console.log(`Clearing movement penalty for ${p.name}: ${p.nextMovePenalty}`);
+      p.nextMovePenalty = 0;
+    }
+  }
+  
   // Advance pointer and begin next turn; increment round on wrap
   const len = state.turnOrder.length || 1;
   state.turnPtr = (state.turnPtr + 1) % len;
@@ -440,7 +565,7 @@ function beginTurnAtCurrentPtr(){
   // Player turn setup
   state.turnIdx = slot.idx;
   const p = currentPlayer();
-  p.turn = { action: 1, bonus: 1, moved: 0 };
+  p.turn = { action: 1, bonus: 1, bonusMax: 1, moved: 0, remainingMovement: 0, movementRolled: false }; // Track remaining movement points & if roll consumed
   // Clear any remaining turn-based effects at start of player's turn
   if (p.effects) p.effects = p.effects.filter(eff => eff.kind !== "inferno_next");
   
@@ -490,18 +615,16 @@ function bossPhase(){
   // Process burn damage
   queueCombatEvent(async () => {
     if (!state.boss) return;
-    
-    const expiredStatuses = state.boss.tickStatuses();
+    // Calculate burn BEFORE ticking durations so first turn counts
     let totalBurn = 0;
     for (const status of state.boss.statuses) {
-      if (status.kind === "burn") {
-        totalBurn += status.amount || 0;
-      }
+      if (status.kind === 'burn') totalBurn += status.amount || 0;
     }
-    
     if (totalBurn > 0) {
-      state.boss.takeDamage(totalBurn, { name: "Burn" });
+      state.boss.takeDamage(totalBurn, { name: 'Burn' });
     }
+    // Now tick (may remove expired ones after damage is applied)
+    state.boss.tickStatuses();
   }, 1000, "Process burn damage");
   
   // Draw and resolve boss cards - SIMPLIFIED
@@ -568,7 +691,9 @@ function bossAdjacentTo(p){
   // Manhattan distance from point to rectangle (grid)
   const dx = px < bx1 ? (bx1 - px) : (px > bx2 ? (px - bx2) : 0);
   const dy = py < by1 ? (by1 - py) : (py > by2 ? (py - by2) : 0);
-  return (dx + dy) === 1;
+  // Treat diagonal adjacency as valid (Chebyshev distance 1) so Charge can connect on diagonals
+  if (dx === 0 && dy === 0) return false; // overlapping / inside not considered adjacent
+  return Math.max(dx, dy) === 1;
 }
 
 function dealDamageToPlayer(p, amount, { reason = "" } = {}){
@@ -616,60 +741,82 @@ async function animatedMoveBossTowardNearest(steps) {
   const target = nearestPlayerToBoss(); 
   if (!target) return 0;
   
-  let moved = 0;
-
-  // Slide in one go like a charge/advance (not step-by-step)
-  let destCol = boss.col;
-  let destRow = boss.row;
-  for (let s = 0; s < steps; s++) {
-    const dx = target.col - destCol;
-    const dy = target.row - destRow;
-    if (dx === 0 && dy === 0) break;
-    let nextCol = destCol, nextRow = destRow;
-    if (Math.abs(dx) >= Math.abs(dy)) nextCol += Math.sign(dx);
-    else nextRow += Math.sign(dy);
-    if (!isBossStepBlocked(nextCol, nextRow, gridN)) {
-      destCol = nextCol; destRow = nextRow; moved += 1;
+  // Implement 5/10 alternating diagonal cost (avg 1.5) like player movement (1 then 2 then 1...)
+  let costUsed = 0; let diagCount = 0; let stepsTaken = 0;
+  let curCol = boss.col; let curRow = boss.row;
+  while (costUsed < steps) {
+    const dCol = target.col - curCol;
+    const dRow = target.row - curRow;
+    if (dCol === 0 && dRow === 0) break;
+    // Prefer reducing both axes (diagonal) if beneficial and allowed
+    let stepCol = 0, stepRow = 0;
+    const wantDiag = dCol !== 0 && dRow !== 0;
+    if (wantDiag) {
+      stepCol = Math.sign(dCol); stepRow = Math.sign(dRow);
+      // Corner cutting prevention: both orthogonal adjacents must be free
+      if (isBossStepBlocked(curCol + stepCol, curRow, gridN) || isBossStepBlocked(curCol, curRow + stepRow, gridN)) {
+        // Fall back to the axis with greater distance
+        if (Math.abs(dCol) >= Math.abs(dRow)) { stepCol = Math.sign(dCol); stepRow = 0; }
+        else { stepCol = 0; stepRow = Math.sign(dRow); }
+      }
     } else {
-      const altCol = destCol + Math.sign(dx);
-      const altRow = destRow + Math.sign(dy);
-      const tryCol = (Math.abs(dx) < Math.abs(dy)) ? altCol : destCol;
-      const tryRow = (Math.abs(dx) < Math.abs(dy)) ? destRow : altRow;
-      if (!isBossStepBlocked(tryCol, tryRow, gridN)) { destCol = tryCol; destRow = tryRow; moved += 1; }
-      else break;
+      if (Math.abs(dCol) >= Math.abs(dRow)) { stepCol = Math.sign(dCol); }
+      else { stepRow = Math.sign(dRow); }
     }
+    const nextCol = curCol + stepCol;
+    const nextRow = curRow + stepRow;
+    if (isBossStepBlocked(nextCol, nextRow, gridN)) break;
+    const diagonal = stepCol !== 0 && stepRow !== 0;
+    const stepCost = diagonal ? (diagCount % 2 === 0 ? 1 : 2) : 1;
+    if (costUsed + stepCost > steps) break; // not enough budget
+    // apply movement
+    curCol = nextCol; curRow = nextRow;
+    costUsed += stepCost;
+    stepsTaken += 1;
+    if (diagonal) diagCount += 1;
   }
-  if (moved > 0) {
-    boss.moveTo(destCol, destRow, true);
+  if (stepsTaken > 0) {
+    boss.moveTo(curCol, curRow, true);
     state.__bossMovedThisTurn = true;
-    // Let the CSS transition complete; duration scales slightly by distance
-    const dur = Math.min(700, 250 + moved * 150);
+    const dur = Math.min(700, 250 + stepsTaken * 150);
     await new Promise(r => setTimeout(r, dur));
   }
-  return moved;
+  return stepsTaken;
 }
 
 async function tryCharge(maxSteps){
   const target = nearestPlayerToBoss(); if (!target) return false;
   const gridN = state.grid?.cells ?? 15;
-  let destCol = state.boss.col;
-  let destRow = state.boss.row;
-  let steps = maxSteps;
-  while (steps-- > 0){
-    const dx = Math.sign(target.col - destCol);
-    const dy = Math.sign(target.row - destRow);
-    const horiz = Math.abs(target.col - destCol) >= Math.abs(target.row - destRow);
-    const nextCol = destCol + (horiz ? dx : 0);
-    const nextRow = destRow + (horiz ? 0 : dy);
-    if (!isBossStepBlocked(nextCol, nextRow, gridN)){
-      destCol = nextCol; destRow = nextRow;
-      if (Math.max(Math.abs(target.col - destCol), Math.abs(target.row - destRow)) <= 1) break;
-    } else break;
+  let curCol = state.boss.col;
+  let curRow = state.boss.row;
+  let costUsed = 0; let diagCount = 0; let stepsTaken = 0;
+  while (costUsed < maxSteps) {
+    const dCol = target.col - curCol;
+    const dRow = target.row - curRow;
+    if (Math.max(Math.abs(dCol), Math.abs(dRow)) <= 1) break; // already adjacent (Chebyshev)
+    let stepCol = 0, stepRow = 0;
+    const wantDiag = dCol !== 0 && dRow !== 0;
+    if (wantDiag) {
+      stepCol = Math.sign(dCol); stepRow = Math.sign(dRow);
+      if (isBossStepBlocked(curCol + stepCol, curRow, gridN) || isBossStepBlocked(curCol, curRow + stepRow, gridN)) {
+        if (Math.abs(dCol) >= Math.abs(dRow)) { stepCol = Math.sign(dCol); stepRow = 0; }
+        else { stepCol = 0; stepRow = Math.sign(dRow); }
+      }
+    } else {
+      if (Math.abs(dCol) >= Math.abs(dRow)) stepCol = Math.sign(dCol); else stepRow = Math.sign(dRow);
+    }
+    const nextCol = curCol + stepCol;
+    const nextRow = curRow + stepRow;
+    if (isBossStepBlocked(nextCol, nextRow, gridN)) break;
+    const diagonal = stepCol !== 0 && stepRow !== 0;
+    const stepCost = diagonal ? (diagCount % 2 === 0 ? 1 : 2) : 1;
+    if (costUsed + stepCost > maxSteps) break;
+    curCol = nextCol; curRow = nextRow; costUsed += stepCost; stepsTaken += 1; if (diagonal) diagCount += 1;
   }
-  if (destCol !== state.boss.col || destRow !== state.boss.row){
-    state.boss.moveTo(destCol, destRow, true);
+  if (curCol !== state.boss.col || curRow !== state.boss.row) {
+    state.boss.moveTo(curCol, curRow, true);
     state.__bossMovedThisTurn = true;
-    const d = Math.abs(destCol - state.boss.col) + Math.abs(destRow - state.boss.row);
+    const d = Math.abs(curCol - state.boss.col) + Math.abs(curRow - state.boss.row);
     const dur = Math.min(700, 200 + d * 140);
     await new Promise(r => setTimeout(r, dur));
   }
@@ -896,35 +1043,32 @@ function moveBossTowardNearest(steps){
   
   const gridN = state.grid?.cells ?? 15;
   const target = nearestPlayerToBoss(); if (!target) return 0;
-  let moved = 0;
-
-  for (let s=0; s<steps; s++){
-    const dx = target.col - boss.col;
-    const dy = target.row - boss.row;
-    if (dx === 0 && dy === 0) break;
-
-    let nextCol = boss.col, nextRow = boss.row;
-    if (Math.abs(dx) >= Math.abs(dy)) nextCol += Math.sign(dx);
-    else nextRow += Math.sign(dy);
-
-  if (!isBossStepBlocked(nextCol, nextRow, gridN)){
-    boss.moveTo(nextCol, nextRow);
-    moved += 1;
-    } else {
-      // try the other axis
-      const altCol = boss.col + Math.sign(dx);
-      const altRow = boss.row + Math.sign(dy);
-      const tryCol = (Math.abs(dx) < Math.abs(dy)) ? altCol : boss.col;
-      const tryRow = (Math.abs(dx) < Math.abs(dy)) ? boss.row : altRow;
-    if (!isBossStepBlocked(tryCol, tryRow, gridN)){
-      boss.moveTo(tryCol, tryRow);
-      moved += 1;
-      } else {
-        break; // stuck
+  let costUsed = 0; let diagCount = 0; let stepsTaken = 0;
+  while (costUsed < steps) {
+    const dCol = target.col - boss.col;
+    const dRow = target.row - boss.row;
+    if (dCol === 0 && dRow === 0) break;
+    let stepCol = 0, stepRow = 0;
+    const wantDiag = dCol !== 0 && dRow !== 0;
+    if (wantDiag) {
+      stepCol = Math.sign(dCol); stepRow = Math.sign(dRow);
+      if (isBossStepBlocked(boss.col + stepCol, boss.row, gridN) || isBossStepBlocked(boss.col, boss.row + stepRow, gridN)) {
+        if (Math.abs(dCol) >= Math.abs(dRow)) { stepCol = Math.sign(dCol); stepRow = 0; }
+        else { stepCol = 0; stepRow = Math.sign(dRow); }
       }
+    } else {
+      if (Math.abs(dCol) >= Math.abs(dRow)) stepCol = Math.sign(dCol); else stepRow = Math.sign(dRow);
     }
+    const nextCol = boss.col + stepCol;
+    const nextRow = boss.row + stepRow;
+    if (isBossStepBlocked(nextCol, nextRow, gridN)) break;
+    const diagonal = stepCol !== 0 && stepRow !== 0;
+    const stepCost = diagonal ? (diagCount % 2 === 0 ? 1 : 2) : 1;
+    if (costUsed + stepCost > steps) break;
+    boss.moveTo(nextCol, nextRow);
+    costUsed += stepCost; stepsTaken += 1; if (diagonal) diagCount += 1;
   }
-  return moved;
+  return stepsTaken;
 }
 
 function isBossStepBlocked(col, row, gridN){
@@ -960,6 +1104,25 @@ export function startCaveCombat(){
   if (!state.ui) state.ui = {};
   // Mark boss panel as the active right-dock view in combat
   state.ui.rightDock = 'boss';
+
+  // FORCE BOSS PANEL TO SHOW
+  const rightDock = document.querySelector('#dock-panel, .right-panel, [data-dock="right"]');
+  if (rightDock) {
+    rightDock.style.display = 'block';
+    rightDock.classList.remove('hidden');
+  }
+
+  // Ensure boss panel is rendered and visible
+  try {
+    renderBossPanel();
+    const bossPanel = document.querySelector('#boss-panel, .boss-panel');
+    if (bossPanel) {
+      bossPanel.style.display = 'block';
+      bossPanel.classList.remove('hidden');
+    }
+  } catch (error) {
+    console.error('Failed to render boss panel:', error);
+  }
 
   // Ensure boss is a proper entity or create one
   if (!(state.boss instanceof BossEntity)) {
@@ -1023,90 +1186,45 @@ export function startCaveCombat(){
     combatBootStarted = true;
     clearCombatEventQueue();
     
-    // Shared state for initiative sequence
-    const entries = [];
-    const rollingCues = [];
-    let headerEl = null;
+  // Shared state for initiative sequence
+  const entries = [];
 
-    // Header: sticky and immediate
-    queueCombatEvent(async () => {
+  // Header: sticky and immediate (auto with 500ms gap)
+  queueCombatEvent(async () => {
       // Clean up any stray initiative elements from a prior partial boot
       try {
-        document.querySelectorAll('#cue-stack .initiative-header, #cue-stack .initiative-rolling').forEach(el => el.remove());
+        document.querySelectorAll('#cue-stack .initiative-header').forEach(el => el.remove());
       } catch {}
-      // Auto-advancing info cue, not requiring clicks
-      const { el } = cueService.info("Rolling for initiative…", { className: "initiative-header", key: "initiative-header" });
-      headerEl = el;
-    }, 0, "Initiative header", true);
+      cueService.info("Rolling for initiative…", { className: "initiative-header", key: "initiative-header" });
+  }, 500, "Initiative header", true);
 
-  // Players: two-step per actor: transient 'rolling…' (removed when result shows), then result cue requiring click
-  const rollingMap = new Map();
+  // Players: single result cue each (no intermediate 'rolling…' indicator)
   for (let i=0;i<state.players.length;i++){
-      const playerIndex = i; // Capture for closure
-      queueCombatEvent(async () => {
-        const p = state.players[playerIndex];
-    // Auto-advancing rolling indicator
-    const { el } = cueService.info(`${p.name} rolling…`, { className: "initiative-rolling", key: `player-${playerIndex}-rolling` });
-    rollingCues.push(el);
-    rollingMap.set(`player-${playerIndex}`, el);
-      }, 2000, `Player ${i+1} rolling`, true);
-
-      queueCombatEvent(async () => {
-        const p = state.players[playerIndex];
-  const sides = Math.max(1, Number(p.moveDie ?? 4));
-  const roll = state.rng.int(1, sides);
-  entries.push({ kind:'player', idx:playerIndex, roll, tb: state.rng.int(1, 1000) });
-    // Remove that player's 'rolling…' cue now; show result briefly then auto-advance
-    const rollingEl = rollingMap.get(`player-${playerIndex}`);
-    if (rollingEl) { fadeRemoveCue(rollingEl); rollingMap.delete(`player-${playerIndex}`); }
-    
-    // Brief auto-advancing result display
-    const { el } = cueService.info(`${p.name} rolls d${sides}… ${roll}!`, { key: `player-${playerIndex}-result` });
-    // Auto-clear after 1.5 seconds
-    setTimeout(() => { if (el.parentNode) fadeRemoveCue(el); }, 1500);
-      }, 0, `Player ${i+1} result`, true);
-    }
-
-    // Boss: same two-step
+    const playerIndex = i;
     queueCombatEvent(async () => {
-      // Auto-advancing boss rolling indicator
-      const { el } = cueService.info(`${state.boss.name} rolling…`, { className: "initiative-rolling", key: "boss-rolling" });
-      rollingCues.push(el);
-      rollingMap.set('boss', el);
-    }, 2000, "Boss rolling", true);
+      const p = state.players[playerIndex];
+      const sides = Math.max(1, Number(p.moveDie ?? 4));
+      const roll = state.rng.int(1, sides);
+      entries.push({ kind:'player', idx:playerIndex, roll, tb: state.rng.int(1, 1000) });
+      cueService.info(`${p.name} rolls d${sides}… ${roll}!`, { key: `player-${playerIndex}-result` });
+    }, 500, `Player ${i+1} result`, true);
+  }
 
-    queueCombatEvent(async () => {
-  const sides = Math.max(1, Number(state.boss.movementDie === 'd3' ? 3 : state.boss.movementDie || 3));
-  const bossRoll = state.rng.int(1, sides);
-      entries.push({ kind:'boss', roll: bossRoll, tb: state.rng.int(1,1000) });
-      const rollingEl = rollingMap.get('boss');
-      if (rollingEl) { fadeRemoveCue(rollingEl); rollingMap.delete('boss'); }
-      
-      // Brief auto-advancing boss result
-      const { el } = cueService.info(`${state.boss.name} rolls d${sides}… ${bossRoll}!`, { key: "boss-result" });
-      // Auto-clear after 1.5 seconds
-      setTimeout(() => { if (el.parentNode) fadeRemoveCue(el); }, 1500);
-    }, 0, "Boss result", true);
+  // Boss: single result cue
+  queueCombatEvent(async () => {
+    const sides = Math.max(1, Number(state.boss.movementDie === 'd3' ? 3 : state.boss.movementDie || 3));
+    const bossRoll = state.rng.int(1, sides);
+    entries.push({ kind:'boss', roll: bossRoll, tb: state.rng.int(1,1000) });
+    cueService.info(`${state.boss.name} rolls d${sides}… ${bossRoll}!`, { key: "boss-result" });
+  }, 500, "Boss result", true);
     
-    // Resolve order and cleanup rolling stickies
+  // Resolve order and cleanup rolling stickies (require player click before proceeding to first turn)
     queueCombatEvent(async () => {
       // Sort descending by roll, then tiebreak
       entries.sort((a,b)=> (b.roll - a.roll) || (b.tb - a.tb));
       state.turnOrder = entries.map(e=> e.kind==='player' ? { kind:'player', idx:e.idx } : { kind:'boss' });
       state.turnPtr = 0; // first in order
-
-  // Cleanup any stragglers and header
-  rollingCues.forEach(el => { try { removeCue(el); } catch {} });
-      if (headerEl) { try { removeCue(headerEl); } catch {} }
-      
-      // Clear any remaining result cues
-      try {
-        document.querySelectorAll('#cue-stack .info-cue').forEach(el => {
-          if (el.textContent.includes('rolls d')) fadeRemoveCue(el);
-        });
-      } catch {}
-
-      // Show turn order - this should require acknowledgment
+      // Show turn order - click will advance; AFTER click we clear entire initiative stack
       const orderText = state.turnOrder.map((entry, i) => {
         if (entry.kind === 'player') {
           const p = state.players[entry.idx];
@@ -1117,7 +1235,15 @@ export function startCaveCombat(){
       }).join(', ');
       const { wait: waitTurnOrder } = cueService.clickToContinue(`Turn order: ${orderText}`);
       await waitTurnOrder;
-    }, 2000, "Resolve turn order", true); // Give time for results to display
+      // After acknowledgment, remove all initiative-related cues
+      try {
+        document.querySelectorAll('#cue-stack .initiative-header').forEach(el => fadeRemoveCue(el));
+        document.querySelectorAll('#cue-stack .info-cue').forEach(el => {
+          const txt = el.textContent || '';
+          if (txt.includes('rolls d')) fadeRemoveCue(el);
+        });
+      } catch {}
+  }, 0, "Resolve turn order", true); // internal click handled; prevent extra queue click
 
     // Start combat automatically
     queueCombatEvent(async () => {
@@ -1150,58 +1276,123 @@ export function initCombatHooks(){
 function startPlayerMovement(){
   const p = currentPlayer();
   if (!state.isPlayerTurn) { cue("Not your turn."); return; }
-  if (p.turn.moved > 0) { cue("Already moved this turn."); return; }
-  // Prevent reroll spam while a movement roll is pending
-  if (Number(state.pendingSteps || 0) > 0) { cue("Movement already rolled—pick a tile or cancel."); return; }
-  const die = p.moveDie ?? 4;
-  let steps = 1 + Math.floor(Math.random() * die);
-  // Apply any movement penalty (e.g., from Roar) once, then clear
-  const penalty = Math.max(0, Number(p.nextMovePenalty || 0));
-  if (penalty > 0) {
-    const before = steps;
-    steps = Math.max(0, steps - penalty);
-    p.nextMovePenalty = 0;
-    cue(`Movement penalty applied: ${before} → ${steps}.`);
+  
+  // Allow movement if we haven't moved yet OR if we have remaining movement points
+  const hasRemainingMovement = p.turn.remainingMovement > 0;
+  const hasntMovedYet = p.turn.moved === 0;
+  const alreadyRolled = !!p.turn.movementRolled;
+  
+  if (!hasRemainingMovement && !hasntMovedYet) { 
+    cue("No movement remaining this turn."); 
+    return; 
+  }
+  
+  // Clear any active targeting (e.g., burn) before starting movement
+  if (activeTargeting) {
+    console.log('Clearing active targeting before movement:', activeTargeting);
+    clearAllTargeting();
+  }
+  
+  // Toggle: second click cancels targeting preview ONLY (does not refund roll)
+  if (Number(state.pendingSteps || 0) > 0) { 
+    state.pendingSteps = 0;
+    cueService.remove('movement-prompt');
+    clearActiveTargeting();
+    cue("Movement selection cancelled (roll preserved). Click Move again to spend remaining movement.");
+    syncUI();
+    return; 
+  }
+  
+  // Calculate movement: either use remaining movement or roll new movement ONCE per turn
+  let steps;
+  if (!alreadyRolled) {
+    // First ever roll this turn
+    const die = p.moveDie ?? 4;
+    let rolled = 1 + Math.floor(Math.random() * die);
+    const penalty = Math.max(0, Number(p.nextMovePenalty || 0));
+    if (penalty > 0) {
+      const before = rolled;
+      rolled = Math.max(0, rolled - penalty);
+      cue(`Movement rolled: d${die} = ${before} → ${rolled} after -${penalty}.`);
+    } else {
+      cue(`Movement rolled: d${die} = ${rolled}.`);
+    }
+    p.turn.remainingMovement = rolled; // Bank it immediately so cancelling later does not re-roll
+    p.turn.movementRolled = true;
+    steps = rolled;
+  } else {
+    steps = p.turn.remainingMovement;
+    cue(`Using remaining movement: ${steps} step${steps===1?'':'s'}.`);
+  }
+  
+  if (steps <= 0) {
+    cue("No movement available.");
+    return;
   }
   state.pendingSteps = steps;
-  cueService.info(`Movement: rolled d${die} = ${steps}. Click a highlighted tile to move.`, { key: 'movement-prompt' });
+  cueService.info(`Movement: ${steps} step${steps===1?'':'s'} available. Click a highlighted tile to move.`, { key: 'movement-prompt' });
 
   // Compute 8-directional BFS with no corner-cutting
   const max = state.grid?.cells ?? 15;
   const key = (c,r) => `${c},${r}`;
   const passable = (c,r) => c>=1 && r>=1 && c<=max && r<=max && !isCellBlocked(c,r,p.id);
   const dirs8 = [ [1,0],[-1,0],[0,1],[0,-1], [1,1],[1,-1],[-1,1],[-1,-1] ];
-  const visited = new Map();
-  const q = [];
-  visited.set(key(p.col,p.row), { col:p.col,row:p.row, dist:0, prev:null });
-  q.push({ col:p.col, row:p.row });
-  while(q.length){
-    const cur = q.shift();
+  // D&D 3.5 optional diagonal rule: first diagonal costs 1, second 2, repeating (avg 1.5)
+  // We'll treat orthogonal =1, diagonal cost = ( (diagCountSoFar % 2) === 0 ? 1 : 2 ) as we progress path.
+  const visited = new Map(); // key -> { col,row,cost,prev,diagCount }
+  function pushNode(arr,node){
+    arr.push(node);
+  }
+  const frontier = [];
+  visited.set(key(p.col,p.row), { col:p.col,row:p.row,cost:0,prev:null,diagCount:0 });
+  pushNode(frontier, { col:p.col,row:p.row });
+  while(frontier.length){
+    // Select node with smallest cost (movement budgets are small, simple scan acceptable)
+    let bestIdx = 0; let bestCost = Infinity;
+    for (let i=0;i<frontier.length;i++){
+      const v = visited.get(key(frontier[i].col,frontier[i].row));
+      if (v.cost < bestCost){ bestCost = v.cost; bestIdx = i; }
+    }
+    const cur = frontier.splice(bestIdx,1)[0];
     const curNode = visited.get(key(cur.col,cur.row));
-    if (curNode.dist === steps) continue;
+    if (!curNode) continue;
+    if (curNode.cost >= steps) continue; // no remaining budget to expand
     for (const [dx,dy] of dirs8){
       const nc = cur.col + dx, nr = cur.row + dy;
-      const k = key(nc,nr);
-      if (visited.has(k)) continue;
       if (!passable(nc,nr)) continue;
-      // no corner cutting for diagonals
+      // prevent diagonal corner cutting
       if (dx!==0 && dy!==0){
         if (!passable(cur.col+dx, cur.row) || !passable(cur.col, cur.row+dy)) continue;
       }
-      visited.set(k, { col:nc,row:nr, dist:curNode.dist+1, prev:key(cur.col,cur.row) });
-      q.push({ col:nc, row:nr });
+      const diag = (dx!==0 && dy!==0);
+      const stepCost = diag ? ((curNode.diagCount % 2) === 0 ? 1 : 2) : 1;
+      const newCost = curNode.cost + stepCost;
+      if (newCost > steps) continue; // over budget
+      const k = key(nc,nr);
+      const prev = key(cur.col,cur.row);
+      const newDiagCount = curNode.diagCount + (diag ? 1 : 0);
+      const existing = visited.get(k);
+      if (!existing || newCost < existing.cost){
+        visited.set(k, { col:nc,row:nr,cost:newCost,prev,diagCount:newDiagCount });
+        pushNode(frontier, { col:nc,row:nr });
+      }
     }
   }
-  // Build tiles list excluding origin
-  const tiles = Array.from(visited.values()).filter(n => !(n.col===p.col && n.row===p.row)).map(n => ({ col:n.col, row:n.row }));
-  beginTileSelection({
-    tiles,
-    canTarget: (c,r) => visited.has(key(c,r)),
-    eventBus: events, // use central event bus for tile highlighting
+  // Use direct DOM targeting like burn targeting for consistent behavior
+  beginSimpleTargeting({
+    range: steps, // movement points budget
+    origin: { col: p.col, row: p.row },
+    distanceMetric: 'dnd35',
+    canTarget: (col, row) => {
+      if (col===p.col && row===p.row) return false;
+      const node = visited.get(key(col,row));
+      return !!node && node.cost <= steps;
+    },
+    highlightClass: 'highlight-move', // Use movement highlighting instead of target highlighting
     onSelect: ({col,row}) => {
-      // Reconstruct path and move instantly along it
+      // Reconstruct path using prev chain (lowest-cost path stored)
       let k = key(col,row); const path=[];
-      while(k){ const n = visited.get(k); path.push({col:n.col,row:n.row}); k = n.prev; }
+      while(k){ const n = visited.get(k); if(!n) break; path.push({col:n.col,row:n.row}); k = n.prev; }
       path.reverse(); // includes origin
       for (let i=1;i<path.length;i++){
         const step = path[i];
@@ -1215,19 +1406,43 @@ function startPlayerMovement(){
         // Update player sprite direction based on movement
         updatePlayerSpriteDirection(p, dx, dy);
       }
-      p.turn.moved = 1;
+      
+      // Update movement tracking: mark as moved and set remaining movement
+      // Recompute cost used along chosen path for accurate remaining movement
+      let costUsed = 0; let diagCount = 0;
+      for (let i=1;i<path.length;i++){
+        const dx = Math.abs(path[i].col - path[i-1].col);
+        const dy = Math.abs(path[i].row - path[i-1].row);
+        if (dx && dy){ // diagonal
+          costUsed += (diagCount % 2 === 0 ? 1 : 2);
+          diagCount += 1;
+        } else {
+          costUsed += 1;
+        }
+      }
+      const stepsUsed = costUsed; // for messaging
+      const remainingAfterMove = Math.max(0, steps - costUsed);
+      
+  if (stepsUsed > 0) p.turn.moved = 1; // Only mark moved if at least one tile traversed
+      p.turn.remainingMovement = remainingAfterMove; // Track remaining movement points
       state.pendingSteps = 0;
-      // Clear movement prompt and show brief result
+      
+      // Clear movement prompt and show result with remaining movement
       cueService.remove('movement-prompt');
-      const { wait } = cueService.clickToContinue(`Movement finished (${path.length-1} step${path.length-1===1?'':'s'}).`);
+      let message = `Movement finished (${stepsUsed} step${stepsUsed===1?'':'s'} used).`;
+      if (remainingAfterMove > 0) {
+        message += ` ${remainingAfterMove} movement remaining.`;
+      }
+      const { wait } = cueService.clickToContinue(message);
       syncUI();
     },
-  onCancel: () => { 
-    state.pendingSteps = 0; 
-    cueService.remove('movement-prompt');
-    cueService.clickToContinue("Movement cancelled.");
-    syncUI(); 
-  }
+    onCancel: () => { 
+      state.pendingSteps = 0; 
+      cueService.remove('movement-prompt');
+      clearActiveTargeting();
+      cueService.clickToContinue("Movement cancelled (roll preserved)." );
+      syncUI(); 
+    }
   });
 }
 

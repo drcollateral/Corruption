@@ -2,12 +2,41 @@
 // Board draws nothing itself; it manages token DOM and positions relative to grid.
 import { state } from "../core/GameState.js";
 import { getPlayerSpriteForClass } from "../data/PlayerSprites.js";
+import { events } from "../core/EventBus.js";
+
 export class Board {
   constructor(root, size){
     this.root = root;
     this.size = size;
     this.tokens = new Map(); // id -> HTMLElement
     this.initializeTiles(); // Create tile elements for highlighting
+    this.setupEventListeners(); // Listen for tile highlighting events
+  }
+  
+  // Set up EventBus listeners for tile highlighting
+  setupEventListeners() {
+    events.on('board:highlightTile', ({ col, row, type, active }) => {
+      this.highlightTile(col, row, type, active);
+    });
+  }
+  
+  // Highlight or unhighlight a tile
+  highlightTile(col, row, type = 'target', active = true) {
+    const tile = this.root.querySelector(`[data-col="${col}"][data-row="${row}"]`);
+    if (!tile) {
+      console.warn(`No tile found at ${col}, ${row}`);
+      return;
+    }
+    
+    const className = type === 'move' ? 'highlight-move' : 'highlight-target';
+    
+    if (active) {
+      tile.classList.add(className);
+      console.log(`Highlighted tile at ${col}, ${row} with type ${type}`);
+    } else {
+      tile.classList.remove(className);
+      console.log(`Removed highlight from tile at ${col}, ${row}`);
+    }
   }
   
   // Create invisible tile elements for highlighting and click detection

@@ -235,6 +235,136 @@ export function createTargetingSystem(eventBus){ return new TargetingSystem(even
 export function isTargeting(ts){ return ts?.isTargeting(); }
 export function beginTargeting(ts, caster, action, opts){ return ts?.beginTargeting(caster, action, opts); }
 export function cancelTargeting(ts){ return ts?.cancelTargeting(); }
+// Direct DOM targeting for simple spell/movement targeting
+export function beginSimpleTargeting({ range, origin, canTarget, onSelect, onCancel, onInvalidTarget, highlightClass = 'highlight-target', distanceMetric = 'chebyshev' }) {
+  console.log('beginSimpleTargeting called with:', { range, origin, canTarget: !!canTarget, highlightClass });
+  console.log('All tiles on page:', document.querySelectorAll('.tile').length);
+  
+  if (!origin) {
+    console.error('No origin provided for targeting');
+    return;
+  }
+
+  // Clear any existing highlights
+  const existingHighlights = document.querySelectorAll('.tile.highlight-target, .tile.highlight-move');
+  console.log('Clearing', existingHighlights.length, 'existing highlights');
+  existingHighlights.forEach(tile => {
+    tile.classList.remove('highlight-target', 'highlight-move');
+  });
+
+  const tiles = [];
+  const gridSize = 15; // Assuming 15x15 grid
+  let highlightedCount = 0;
+  
+  // Calculate tiles in range using selected distance metric
+  for (let col = 1; col <= gridSize; col++) {
+    for (let row = 1; row <= gridSize; row++) {
+      const dx = Math.abs(col - origin.col);
+      const dy = Math.abs(row - origin.row);
+      let distance;
+      if (distanceMetric === 'chebyshev') {
+        distance = Math.max(dx, dy);
+      } else if (distanceMetric === 'manhattan') {
+        distance = dx + dy;
+      } else if (distanceMetric === 'dnd35') {
+        // 3.5 optional: 5/10 alternating diagonals. For range gating, approximate by: cost = dx + dy + floor(min(dx,dy)/2)
+        const diagonals = Math.min(dx, dy);
+        const straight = Math.abs(dx - dy);
+        // Each pair of diagonals costs 15 (5+10); so cost = 5*diagonals + 5*floor((diagonals+1)/2)
+        // Simplify using integer arithmetic: pairCost = 15 per 2; leftover = 5
+        const diagPairs = Math.floor(diagonals / 2);
+        const leftover = diagonals % 2; // 1 if odd
+        const diagCost = diagPairs * 15 + leftover * 5; // in 'feet'
+        const straightCost = straight * 5;
+        distance = (diagCost + straightCost) / 5; // convert back to 5-ft units
+      } else {
+        distance = Math.max(dx, dy);
+      }
+      if (distance <= range) {
+        const isValid = canTarget ? canTarget(col, row) : true;
+        if (isValid) {
+          tiles.push({ col, row });
+          
+          // Highlight the tile directly with the specified class
+          const tile = document.querySelector(`[data-col="${col}"][data-row="${row}"]`);
+          if (tile) {
+            tile.classList.add(highlightClass);
+            highlightedCount++;
+            console.log(`✓ Highlighted tile at ${col}, ${row} with class ${highlightClass} - classes:`, tile.className);
+          } else {
+            console.warn(`✗ No tile element found at ${col}, ${row}`);
+            // Let's also try with .tile selector
+            const tileAlt = document.querySelector(`.tile[data-col="${col}"][data-row="${row}"]`);
+            if (tileAlt) {
+              tileAlt.classList.add(highlightClass);
+              highlightedCount++;
+              console.log(`✓ (Alt) Highlighted tile at ${col}, ${row} with class ${highlightClass}`);
+            }
+          }
+        } else {
+          console.log(`Tile at ${col}, ${row} in range but invalid for targeting`);
+        }
+      }
+    }
+  }
+
+  console.log(`Total highlighted tiles: ${highlightedCount} out of ${tiles.length} valid tiles`);
+
+  // Set up click handlers
+  const clickHandler = (event) => {
+    const tile = event.target.closest('.tile');
+    if (!tile) {
+      console.log('Click not on a tile element');
+      return;
+    }
+
+    const col = parseInt(tile.dataset.col);
+    const row = parseInt(tile.dataset.row);
+
+    if (!col || !row) {
+      console.log('Tile missing col/row data:', tile.dataset);
+      return;
+    }
+
+    console.log(`Clicked tile at ${col}, ${row}, highlighted:`, tile.classList.contains(highlightClass));
+
+    // Check if this tile is highlighted with the correct class
+    if (tile.classList.contains(highlightClass)) {
+      cleanup();
+      console.log('Valid target selected:', { col, row });
+      if (onSelect) onSelect({ col, row });
+    } else if (onInvalidTarget) {
+      console.log('Invalid target clicked:', { col, row });
+      onInvalidTarget({ col, row });
+    }
+  };
+
+  const escapeHandler = (event) => {
+    if (event.key === 'Escape') {
+      console.log('Escape pressed - cancelling targeting');
+      cleanup();
+      if (onCancel) onCancel();
+    }
+  };
+
+  const cleanup = () => {
+    document.removeEventListener('click', clickHandler);
+    document.removeEventListener('keydown', escapeHandler);
+    
+    // Clear all highlights
+    const highlightsToRemove = document.querySelectorAll('.tile.highlight-target, .tile.highlight-move');
+    console.log('Cleaning up', highlightsToRemove.length, 'highlights');
+    highlightsToRemove.forEach(tile => {
+      tile.classList.remove('highlight-target', 'highlight-move');
+    });
+  };
+
+  document.addEventListener('click', clickHandler);
+  document.addEventListener('keydown', escapeHandler);
+
+  return { cleanup };
+}
+
 // Legacy tile selection (not yet implemented in new system)
 export function beginTileSelection(opts){
   // opts: { tiles:[{col,row}], canTarget(col,row), onSelect({col,row}), onCancel, eventBus }
