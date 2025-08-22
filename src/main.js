@@ -13,6 +13,7 @@ import { wireControls } from "./game/InputHandler.js";
 import { wireBossDeckModal } from "./ui/ModalSystem.js";
 import { renderCharacterSheet } from "./ui/CharacterSheet.js";
 import { initCombatHooks } from "./game/CombatManager.js";
+import "./utils/CueConfigLoader.js"; // Initialize cue configuration system
 
 window.addEventListener("DOMContentLoaded", () => {
   console.log("Starting Corruption RPG - Professional Architecture");

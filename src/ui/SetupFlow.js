@@ -22,8 +22,17 @@ export function wireSetupFlow(onCountReady) {
         const sel = document.getElementById("player-count");
         const count = Number(sel?.value || 2);
         const skipCave = !!document.getElementById("debug-skip-cave")?.checked;
+        const logCues = !!document.getElementById("debug-log-cues")?.checked;
+        const logCombat = !!document.getElementById("debug-log-combat")?.checked;
+        const logBoss = !!document.getElementById("debug-log-boss")?.checked;
+        
         console.log("Selected count:", count, "skipToCave:", skipCave);
+        console.log("Debug logging:", { cues: logCues, combat: logCombat, boss: logBoss });
+        
         setDebugFlag("skipToCaveAfterCreate", skipCave);
+        setDebugFlag("logCues", logCues);
+        setDebugFlag("logCombat", logCombat);
+        setDebugFlag("logBoss", logBoss);
         
         // Hide setup AGGRESSIVELY
         if (playersSetup) {
