@@ -1,6 +1,7 @@
 // /boss_panel.js
 // Boss dock panel with anchored tooltip bar for statuses.
 import { state } from "../core/GameState.js";
+import { probWithReshuffle } from "../utils/probability.js";
 
 function el(sel){ return document.querySelector(sel); }
 function esc(s){ return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
@@ -34,11 +35,25 @@ export function renderBossPanel(){
   const log = Array.isArray(state.combatLog) ? state.combatLog : [];
   const logHtml = log.map(line => `<div class="log-line">${esc(line)}</div>`).join("");
 
-  // Boss deck info — integrated into the boss panel
-  const deck = state.boss?.deck;
-  const drawCount = deck?.draw?.length ?? 0;
-  const discardCount = deck?.discard?.length ?? 0;
-  const currentCard = deck?.current?.name || "(none)";
+  // Boss deck (probability tracker)
+  const boss = state.boss;
+  // Auto-link legacy deck structure if missing (self-heal each render)
+  if (boss && (!boss.deck || (!boss.deck.drawPile && state.bossDeck && state.bossDeck.drawPile))) {
+    boss.deck = state.bossDeck; // assign full object (has drawPile/discardPile)
+    console.debug('[BossPanel] Auto-linked legacy state.bossDeck to boss.deck');
+  }
+  const deckSize = boss?.deckSize ? boss.deckSize() : (boss?.deck?.drawPile?.length || 0);
+  const discardSize = boss?.discardSize ? boss.discardSize() : (boss?.deck?.discardPile?.length || 0);
+  const drawPerTurn = boss?.getDrawCount ? boss.getDrawCount() : 1;
+  if (boss && (!boss.deck || !boss.deck.drawPile)) {
+    console.debug('[BossPanel] Boss deck missing or uninitialized:', {
+      hasBoss: !!boss,
+      bossType: boss.type,
+      bossDeckRef: boss.deck,
+      stateBossDeck: state.bossDeck,
+      note: 'If state.bossDeck exists (legacy), need to assign it to state.boss.deck for new tracker.'
+    });
+  }
 
   c.innerHTML = `
     <div class="boss-panel">
@@ -49,25 +64,10 @@ export function renderBossPanel(){
       <div class="status-list" id="boss-status-list">${renderStatuses()}</div>
       <div id="boss-tip" class="tip-bar empty" aria-live="polite">(hover a status for details)</div>
 
-      <h3 style="margin:10px 0 6px 0;">Boss Deck</h3>
-      <div class="kv" style="margin-bottom:6px;">
-        <div>Current</div><div>${esc(currentCard)}</div>
-        <div>Draw</div><div>${drawCount}</div>
-        <div>Discard</div><div>${discardCount}</div>
+      <h3 style="margin:10px 0 6px 0;">Boss Deck Odds</h3>
+      <div id="boss-deck-tracker" class="deck-tracker" aria-label="Boss deck probability tracker">
+        ${renderDeckTracker(boss, deckSize, discardSize, drawPerTurn)}
       </div>
-      <details>
-        <summary>Show piles</summary>
-        <div style="display:flex; gap:12px; margin-top:6px;">
-          <div style="flex:1;">
-            <h4 style="margin:4px 0;">Draw Pile</h4>
-            <ul class="deck-list">${(deck?.draw||[]).map(c=>`<li class="deck-item"><div>${esc(c.name||c.id||"?")}</div></li>`).join("")}</ul>
-          </div>
-          <div style="flex:1;">
-            <h4 style="margin:4px 0;">Discard</h4>
-            <ul class="deck-list">${(deck?.discard||[]).map(c=>`<li class="deck-item"><div>${esc(c.name||c.id||"?")}</div></li>`).join("")}</ul>
-          </div>
-        </div>
-      </details>
 
       <h3 style="margin:12px 0 4px 0;">Combat Log</h3>
       <div id="combat-log" class="combat-log" aria-live="polite">${logHtml}</div>
@@ -133,6 +133,43 @@ function wireTips(){
   });
 }
 
+function renderDeckTracker(boss, deckSize, discardSize, drawPerTurn){
+  if (!boss) return `<div class="dim-line">(no boss)</div>`;
+  const breakdown = boss.getDeckBreakdown ? boss.getDeckBreakdown() : [];
+  if (!breakdown.length){
+    console.debug('[BossPanel] Empty breakdown', {
+      deckSize, discardSize,
+      bossHasDeckObj: !!boss.deck,
+      drawPileLen: boss.deck?.drawPile?.length,
+      discardPileLen: boss.deck?.discardPile?.length,
+      legacyStateBossDeck: state.bossDeck,
+      suggestion: 'Assign state.boss.deck = state.bossDeck for compatibility.'
+    });
+    // Differentiate between truly empty vs not yet linked
+    if (boss.deck && boss.deck.drawPile && boss.deck.drawPile.length === 0) {
+      return `<div class="dim-line">(empty deck)</div>`;
+    }
+    if (!boss.deck || !boss.deck.drawPile) {
+      return `<div class="dim-line">(deck initializing…)</div>`;
+    }
+  }
+  if (!breakdown.length) return `<div class="dim-line">(empty deck)</div>`;
+  const rows = breakdown.map(card => {
+    if (card.total === 0) return '';
+    const p = probWithReshuffle(deckSize, card.inDeck, discardSize, card.inDiscard, drawPerTurn);
+    let cls = 'prob-low';
+    if (p >= 0.5) cls = 'prob-high'; else if (p >= 0.25) cls = 'prob-medium';
+    return `<div class="deck-row" title="${esc(card.name)}: ${card.inDeck} in deck${card.inDiscard?`, ${card.inDiscard} in discard`:''}\nChance in next draw (≥1): ${(p*100).toFixed(1)}%">`+
+           `<div class="deck-name">${esc(card.name)}</div>`+
+           `<div class="deck-meta"><small>${card.inDeck}${card.inDiscard?` (+${card.inDiscard})`:''}</small></div>`+
+           `<div class="deck-odds ${cls}">${(p*100).toFixed(1)}%</div>`+
+           `</div>`;
+  }).join("");
+  const reshuffle = deckSize < drawPerTurn && discardSize > 0;
+  return `<div class="deck-header"><span>${deckSize} draw • ${discardSize} discard • drawing ${drawPerTurn}</span>${reshuffle?'<span class="reshuffle-note">Reshuffle</span>':''}</div>`+
+         `<div class="deck-rows">${rows}</div>`;
+}
+
 // Public API: append a line to the combat log under boss panel
 export function bossLog(line){
   if (!Array.isArray(state.combatLog)) state.combatLog = [];
@@ -149,8 +186,10 @@ export function bossLog(line){
   const logEntry = `[${timestamp}] ${String(line ?? "")}`;
   state.combatLog.push(logEntry);
   
-  // Also log to browser console with timestamp
-  console.log(`🎮 COMBAT [${timestamp}]: ${String(line ?? "")}`);
+  // Only log to browser console if boss logging is enabled
+  if (state?.debug?.logBoss) {
+    console.log(`🎮 COMBAT [${timestamp}]: ${String(line ?? "")}`);
+  }
   
   // Trim to a reasonable length
   if (state.combatLog.length > 200) state.combatLog.splice(0, state.combatLog.length - 200);

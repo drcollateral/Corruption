@@ -1,36 +1,143 @@
 // /action_bar.js
-// Modular action bar: renders Move, dynamic Actions (spells), dynamic Bonuses (passives), End Turn.
-// Calls manual end turn (gated), not a generic endTurn to avoid legacy auto hooks.
+// Enhanced modular action bar with data-driven tooltips (SpellRegistry / Shift-expand).
+import { ATTRIBUTE_SPELLS } from "../data/SpellRegistry.js";
+
 let wired = false;
 let refs = null;
 let handlers = { onMove: ()=>{}, onAction: (id)=>{}, onBonus: (id)=>{}, onEndTurn: ()=>{} };
-let tooltipEl = null;
 
-function ensureTooltip(){
-  if (tooltipEl) return tooltipEl;
-  tooltipEl = document.createElement('div');
-  tooltipEl.id = 'ab-tooltip';
-  document.body.appendChild(tooltipEl);
-  return tooltipEl;
+// Advanced tooltip system ------------------------------------------------------
+let actTooltipEl = null; // floating element
+let shiftHeld = false;
+let currentTip = null; // { element, type, data }
+
+function ensureActionTooltip(){
+  if (actTooltipEl) return actTooltipEl;
+  actTooltipEl = document.createElement('div');
+  actTooltipEl.id = 'action-tooltip';
+  actTooltipEl.className = 'action-tooltip hidden';
+  document.body.appendChild(actTooltipEl);
+  window.addEventListener('keydown', (e)=>{ if (e.key === 'Shift' && !shiftHeld){ shiftHeld = true; refreshTooltip(); } });
+  window.addEventListener('keyup',   (e)=>{ if (e.key === 'Shift'){ shiftHeld = false; refreshTooltip(); } });
+  window.addEventListener('scroll', hideActionTooltip, true);
+  return actTooltipEl;
 }
 
-function showTooltip(target){
-  const tip = target.getAttribute('data-tip');
-  if (!tip) return;
-  const el = ensureTooltip();
-  el.textContent = tip;
-  el.classList.add('visible');
+function getSpellFromRegistry(spellId, player){
+  if (!player || !player.classId || !player.affinity) return null;
+  const table = ATTRIBUTE_SPELLS[player.classId]?.[player.affinity];
+  if (!table) return null;
+  for (const track of ['POW','DEF','SUP']){
+    const trackTbl = table[track];
+    if (!trackTbl) continue;
+    for (const level of Object.keys(trackTbl)){
+      const arr = trackTbl[level];
+      const found = arr.find(s=>s.id===spellId);
+      if (found) return { spell: found, track, level };
+    }
+  }
+  return null;
+}
+
+function buildSpellTooltipData(spellId, player){
+  // Fallback dictionary for special / simplified actions
+  const fallback = {
+    inferno: {
+      shortDesc: 'Prime next Burn (toggle).',
+      longDesc: 'Inferno (Bonus)\n\nPrimes your next Burn to: \n• Detonate instantly for its full damage (3 ticks)\n• Emit a pulse (future fire interactions)\n• See fire spells for added Inferno effects.\n\nToggle off to refund bonus action.'
+    },
+    burn: {
+      shortDesc: 'Apply 3-turn 1 dmg DoT (stacks).',
+      longDesc: 'Burn (Action)\n\nIgnites target for 1 fire damage at start of each of 3 turns.\n• Stacks: each application is an independent stack\n• No refresh on reapply (each full duration)\n• If Inferno primed: detonate immediately for 3 damage then pulse'
+    }
+  };
+  const reg = getSpellFromRegistry(spellId, player);
+  if (!reg){
+    return fallback[spellId] || { shortDesc: spellId, longDesc: '' };
+  }
+  const { spell, track, level } = reg;
+  let shortDesc = spell.desc || spell.name || spellId;
+  let long = `${spell.name || spellId}`;
+  if (spell.actionType === 'bonus') long += ' (Bonus)';
+  long += `\n\n${spell.desc || ''}`;
+  if (Array.isArray(spell.effects) && spell.effects.length){
+    long += `\n\nEffects:`;
+    for (const ef of spell.effects){
+      if (ef.type === 'dot') long += `\n• DoT: ${ef.amount} dmg/turn for ${ef.duration} turns`;
+      else if (ef.type === 'hot') long += `\n• HoT: ${ef.amount} heal/turn for ${ef.duration} turns`;
+      else if (ef.type === 'equipOffhand') long += `\n• Equip Offhand: ${ef.item?.name || 'Item'} (${Object.keys(ef.item?.stats||{}).join(', ')})`;
+      else long += `\n• ${ef.type}`;
+    }
+  }
+  if (spell.tags?.length) long += `\n\nTags: ${spell.tags.join(', ')}`;
+  long += `\nUnlocked: ${track} ${level}`;
+  return { shortDesc, longDesc: long };
+}
+
+function buildMoveTooltipData(movementInfo){
+  const remaining = movementInfo?.remaining ?? 0;
+  return {
+    shortDesc: `Movement remaining: ${remaining}`,
+    longDesc: `Movement System\n\nRolled: ${movementInfo?.rolled ?? '—'}\nUsed: ${movementInfo?.used ?? 0}\nRemaining: ${remaining}\n\nDiagonal rule (D&D 3.5 alt):\n• 1st diagonal costs 1\n• 2nd diagonal costs 2 (alternating)`
+  };
+}
+
+function showActionTooltip(el, type, context){
+  ensureActionTooltip();
+  let data = null;
+  if (type === 'move') data = buildMoveTooltipData(context?.movementInfo);
+  else if (type === 'action' || type === 'bonus'){
+    const spellId = el.dataset.spellId;
+    if (spellId) data = buildSpellTooltipData(spellId, context?.player);
+  }
+  if (!data) return;
+  currentTip = { element: el, type, data };
+  try { if (window.DEBUG?.is('tip')) window.DEBUG.log('tip','showActionTooltip', { type, data }); } catch {}
+  refreshTooltip();
+  positionTooltip(el);
+  actTooltipEl.classList.remove('hidden');
+}
+
+function hideActionTooltip(){
+  if (!actTooltipEl) return;
+  actTooltipEl.classList.add('hidden');
+  try { if (window.DEBUG?.is('tip')) window.DEBUG.log('tip','hideActionTooltip'); } catch {}
+  currentTip = null;
+}
+
+function refreshTooltip(){
+  if (!currentTip || !actTooltipEl) return;
+  const { data } = currentTip;
+  const full = shiftHeld && data.longDesc ? data.longDesc : data.shortDesc;
+  try { if (window.DEBUG?.is('tip')) window.DEBUG.log('tip','refreshTooltip', { shiftHeld, hasLong: !!data.longDesc }); } catch {}
+  const lines = full.split(/\n/g);
+  let html = '';
+  for (const line of lines){
+    if (!line.trim()){ html += '<div class="tooltip-spacer"></div>'; continue; }
+    if (line.startsWith('•')) html += `<div class="tooltip-bullet">${escapeHtml(line)}</div>`;
+    else if (!html) html += `<div class="tooltip-title">${escapeHtml(line)}</div>`;
+    else html += `<div class="tooltip-line">${escapeHtml(line)}</div>`;
+  }
+  if (data.longDesc && !shiftHeld) html += '<div class="tooltip-hint">Hold Shift for details</div>';
+  actTooltipEl.innerHTML = html;
+}
+
+function positionTooltip(target){
   const rect = target.getBoundingClientRect();
-  const pad = 6;
-  const top = Math.max(4, rect.top - el.offsetHeight - 8);
-  let left = rect.left + rect.width/2 - el.offsetWidth/2;
-  left = Math.max(pad, Math.min(window.innerWidth - el.offsetWidth - pad, left));
-  el.style.top = top + 'px';
+  const el = actTooltipEl;
+  el.style.left = '0px'; // reset for accurate measurement
+  el.style.top = '0px';
+  const tb = el.getBoundingClientRect();
+  let left = rect.left + (rect.width - tb.width)/2;
+  left = Math.max(8, Math.min(window.innerWidth - tb.width - 8, left));
+  let top = rect.top - tb.height - 8;
+  if (top < 4) top = rect.bottom + 8;
   el.style.left = left + 'px';
+  el.style.top = top + 'px';
 }
 
-function hideTooltip(){
-  if (tooltipEl) tooltipEl.classList.remove('visible');
+function escapeHtml(str){
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 export function mountActionBar(h){
@@ -70,19 +177,20 @@ export function mountActionBar(h){
 
   if (!wired){
     moveBtn.addEventListener("click", () => handlers.onMove?.());
-    endBtn.addEventListener("click", () => handlers.onEndTurn?.()); // manual-only
-    // Delegated tooltip events
-    root.addEventListener('mouseover', (e) => {
-      const t = e.target;
-      if (t instanceof HTMLElement && t.closest('#action-bar button') && t.hasAttribute('data-tip')){
-        showTooltip(t);
+    endBtn.addEventListener("click", () => handlers.onEndTurn?.());
+    root.addEventListener('mouseover', (e)=>{
+      const btn = e.target instanceof HTMLElement ? e.target.closest('#action-bar button') : null;
+      if (!btn) return;
+      if (btn === moveBtn) showActionTooltip(btn, 'move', { movementInfo: lastModel?.player?.movementInfo });
+      else if (btn.dataset.spellId){
+        const kind = btn.classList.contains('ghost') ? 'bonus' : 'action';
+        showActionTooltip(btn, kind, { player: lastModel?.player });
       }
     });
-    root.addEventListener('mouseout', (e) => {
-      const t = e.target;
-      if (t instanceof HTMLElement && t.closest('#action-bar button')) hideTooltip();
+    root.addEventListener('mouseout', (e)=>{
+      const to = e.relatedTarget instanceof HTMLElement ? e.relatedTarget.closest('#action-bar button') : null;
+      if (!to) hideActionTooltip();
     });
-    window.addEventListener('scroll', hideTooltip, true);
     wired = true;
   }
 
@@ -90,76 +198,40 @@ export function mountActionBar(h){
   root.classList.remove("hidden");
 }
 
+let lastModel = null; // keep for tooltip context
 export function updateActionBar(model){
+  lastModel = model;
   if (!refs) return;
   refs.root.classList.toggle("hidden", !model.inCombat);
   refs.playerHp.textContent = `${model.player.name} ${model.player.hp}/${model.player.hpMax}`;
   refs.bossHp.textContent = `${model.boss.name} ${model.boss.hp}/${model.boss.hpMax}`;
-  // Buttons
   refs.moveBtn.disabled = !model.player.canMove;
   refs.endBtn.disabled = !model.player.canEndTurn;
 
-  // Rebuild dynamic actions/bonuses
-  refs.dyn.innerHTML = "";
-  const addBtn = (id, label, enabled, kind, enhanced=false) => {
-    const b = document.createElement("button");
-    b.className = kind === 'action' ? "primary" : "ghost";
-    b.textContent = label + (enhanced ? " 🔥" : "");
-    b.disabled = !enabled;
-    if (enhanced) b.classList.add("enhanced");
-    // Tooltip text via data attribute
-    if (kind === 'action') {
-      b.setAttribute('data-tip', spellTooltip(id, model.player));
-    } else if (kind === 'bonus') {
-      b.setAttribute('data-tip', bonusTooltip(id, model.player));
-    }
-    b.addEventListener("click", () => {
-      if (kind === 'action') handlers.onAction?.(id);
-      else handlers.onBonus?.(id);
+  refs.dyn.innerHTML = '';
+  const addBtn = (spell, kind) => {
+    const btn = document.createElement('button');
+    btn.className = kind === 'action' ? 'primary action-btn' : 'ghost bonus-btn';
+    const enhanced = spell.id === 'burn' && model.player.hasInferno;
+    btn.textContent = (kind === 'action' ? 'Cast: ' : 'Bonus: ') + spell.name + (enhanced ? ' 🔥' : '');
+    btn.disabled = !spell.enabled;
+    if (enhanced) btn.classList.add('enhanced');
+    btn.dataset.spellId = spell.id;
+    btn.dataset.action = spell.id; // Add for UIManager compatibility
+    btn.addEventListener('click', ()=>{
+      if (kind === 'action') handlers.onAction?.(spell.id); else handlers.onBonus?.(spell.id);
     });
-    refs.dyn.appendChild(b);
+    refs.dyn.appendChild(btn);
   };
+  (model.actions||[]).forEach(a=> addBtn(a,'action'));
+  (model.bonuses||[]).forEach(b=> addBtn(b,'bonus'));
 
-  // Actions (spells)
-  for (const a of (model.actions || [])){
-    const enhanced = a.id === 'burn' && model.player.hasInferno;
-    addBtn(a.id, `Cast: ${a.name}` , !!a.enabled, 'action', enhanced);
-  }
-  // Bonuses (passives)
-  for (const b of (model.bonuses || [])){
-    addBtn(b.id, `Bonus: ${b.name}`, !!b.enabled, 'bonus', false);
-  }
-
-  refs.dotAction.classList.toggle("empty", !(model.player.action > 0));
-  refs.dotBonus.classList.toggle("empty",  !(model.player.bonus > 0));
-
-  // Movement button tooltip with rolled/remaining info
-  if (model.player.movementInfo){
-    const mi = model.player.movementInfo;
-    let parts = [];
-    if (mi.rolled != null) parts.push(`Rolled: ${mi.rolled}`);
-    parts.push(`Used: ${mi.used}`);
-    parts.push(`Remaining: ${mi.remaining}`);
-    refs.moveBtn.setAttribute('data-tip', parts.join(' | '));
-  } else {
-    refs.moveBtn.setAttribute('data-tip', 'Roll movement (once) or spend remaining steps.');
-  }
+  refs.dotAction.classList.toggle('empty', !(model.player.action > 0));
+  refs.dotBonus.classList.toggle('empty', !(model.player.bonus > 0));
 }
 
-// Simple tooltip text helpers (lightweight; real data could come from SpellRegistry)
-function spellTooltip(id, playerModel){
-  switch(id){
-    case 'burn': return 'Burn: Action. Apply a 3-tick 1 dmg DoT (stacks). If Inferno primed: detonate immediately.';
-    case 'inferno': return 'Inferno: Bonus. Prime to convert next Burn into instant damage + pulse. Click again to cancel.';
-    default: return id;
-  }
-}
-function bonusTooltip(id, playerModel){
-  switch(id){
-    case 'inferno': return spellTooltip(id, playerModel);
-    default: return id;
-  }
-}
+// Export tooltip controls for potential external uses
+export { showActionTooltip as showTooltip, hideActionTooltip as hideTooltip };
 
 
 
