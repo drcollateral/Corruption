@@ -3,6 +3,15 @@
 
 import { getBossSprite } from "../data/BossSprites.js";
 
+import { state } from '../core/GameState.js';
+
+// Debug logging helper - only log if boss logging is enabled
+function debugBossLog(...args) {
+  if (state?.debug?.logBoss) {
+    console.log(...args);
+  }
+}
+
 export class BossEntity {
   constructor(config) {
     // Core properties
@@ -27,6 +36,9 @@ export class BossEntity {
     
     // Deck system
     this.deck = null; // Will be set by combat system
+  // Optional legacy piles (if a simpler deck shape is used elsewhere)
+  this.discard = null; // some existing systems may populate this
+  this.drawCount = config.drawCount || 1; // default cards drawn per boss turn
   }
   
   // Position management with optional animation
@@ -150,7 +162,7 @@ export class BossEntity {
     const result = (col >= this.col && col < this.col + this.w &&
             row >= this.row && row < this.row + this.h);
     
-    console.log(`🎯 BossEntity.intersects(${col}, ${row}):`, {
+    debugBossLog(`🎯 BossEntity.intersects(${col}, ${row}):`, {
       bossPos: { col: this.col, row: this.row },
       bossSize: { w: this.w, h: this.h },
       checkRange: { 
@@ -229,20 +241,135 @@ export class BossEntity {
   }
 }
 
-// Boss factory for different boss types
+/* ---------------- Deck Helper Methods (probability + UI support) ---------------- */
+BossEntity.prototype.deckSize = function(){
+  // Prefer structured deck object with drawPile, fallback to legacy draw format
+  let n = 0;
+  if (this.deck && Array.isArray(this.deck.drawPile)) {
+    n = this.deck.drawPile.length;
+  } else if (this.deck && Array.isArray(this.deck.draw)) {
+    n = this.deck.draw.length; // Legacy format support
+  } else if (Array.isArray(this.deck)) {
+    n = this.deck.length;
+  }
+  try { if (window.DEBUG?.is('deck')) window.DEBUG.log('deck','deckSize', n); } catch {}
+  return n;
+};
+
+BossEntity.prototype.discardSize = function(){
+  // Prefer structured deck object with discardPile, fallback to legacy discard format
+  let n = 0;
+  if (this.deck && Array.isArray(this.deck.discardPile)) {
+    n = this.deck.discardPile.length;
+  } else if (this.deck && Array.isArray(this.deck.discard)) {
+    n = this.deck.discard.length; // Legacy format support
+  } else if (Array.isArray(this.discard)) {
+    n = this.discard.length;
+  }
+  try { if (window.DEBUG?.is('deck')) window.DEBUG.log('deck','discardSize', n); } catch {}
+  return n;
+};
+
+BossEntity.prototype.getDrawCount = function(){
+  return this.drawCount || this.drawPerTurn || 1;
+};
+
+BossEntity.prototype.getCardName = function(cardId){
+  const map = {
+    swipe: 'Swipe',
+    charge: 'Charge', 
+    roar: 'Roar',
+    enrage: 'Enrage',
+    maul: 'Maul',
+    hibernate: 'Hibernate',
+    // Legacy compatibility
+    advance1: 'Advance 1'
+  };
+  
+  // Try to find name from live card objects in either format
+  if (this.deck) {
+    const drawPile = this.deck.drawPile || this.deck.draw || [];
+    const discardPile = this.deck.discardPile || this.deck.discard || [];
+    const found = drawPile.concat(discardPile).find(c => c && c.id === cardId);
+    if (found && found.name) return found.name;
+  }
+  
+  return map[cardId] || (cardId ? cardId.charAt(0).toUpperCase() + cardId.slice(1) : '?');
+};
+
+BossEntity.prototype.getDeckCounts = function(){
+  const counts = new Map();
+  const add = (arr, field) => {
+    if (!Array.isArray(arr)) return;
+    for (const c of arr){
+      const id = c && c.id ? c.id : c;
+      if (!id) continue;
+      const entry = counts.get(id) || { inDeck:0, inDiscard:0, total:0 };
+      entry[field]++;
+      entry.total++;
+      counts.set(id, entry);
+    }
+  };
+  
+  // Handle both structured deck formats
+  if (this.deck && this.deck.drawPile) {
+    add(this.deck.drawPile, 'inDeck');
+  } else if (this.deck && this.deck.draw) {
+    add(this.deck.draw, 'inDeck'); // Legacy format support
+  } else if (Array.isArray(this.deck)) {
+    add(this.deck, 'inDeck');
+  }
+  
+  if (this.deck && this.deck.discardPile) {
+    add(this.deck.discardPile, 'inDiscard');
+  } else if (this.deck && this.deck.discard) {
+    add(this.deck.discard, 'inDiscard'); // Legacy format support
+  } else if (Array.isArray(this.discard)) {
+    add(this.discard, 'inDiscard');
+  }
+  
+  try { if (window.DEBUG?.is('deck')) window.DEBUG.log('deck','getDeckCounts', Array.from(counts.entries())); } catch {}
+  return counts;
+};
+
+BossEntity.prototype.getDeckBreakdown = function(){
+  const map = this.getDeckCounts();
+  const out = [];
+  for (const [id, info] of map.entries()){
+    out.push({ id, name: this.getCardName(id), inDeck: info.inDeck, inDiscard: info.inDiscard, total: info.total });
+  }
+  out.sort((a,b)=> (b.inDeck - a.inDeck) || a.name.localeCompare(b.name));
+  try { if (window.DEBUG?.is('deck')) window.DEBUG.log('deck','getDeckBreakdown', out); } catch {}
+  return out;
+};
+
+// Boss factory for different boss types - DEPRECATED
+// Use src/factories/BossFactory.js for new boss creation
 export class BossFactory {
-  static createBear(col, row) {
-    return new BossEntity({
-      type: 'bear',
-      name: 'Bear',
-      col,
-      row,
-      w: 1,
-      h: 2,
-      hp: 100,
-      hpMax: 100,
-      movementDie: 'd3'
-    });
+  static async createBear(col = 8, row = 8, overrides = {}) {
+    try {
+      // Import the new factory dynamically to avoid circular dependencies
+      const { createBear } = await import('../factories/BossFactory.js');
+      return await createBear(col, row, overrides);
+    } catch (error) {
+      console.error('Failed to load new BossFactory, using legacy fallback:', error);
+      
+      // Fallback to basic boss entity
+      return new BossEntity({
+        id: `bear_${Date.now()}`,
+        type: 'bear',
+        name: 'Bear',
+        col,
+        row,
+        w: 1,
+        h: 2,
+        hp: 30,
+        hpMax: 30,
+        movementDie: 'd3',
+        drawCount: 1,
+        ...overrides
+      });
+    }
   }
   
   static createDragon(col, row) {
