@@ -12,9 +12,14 @@ import { renderParty } from "./ui/PartyPanel.js";
 import { wireControls } from "./game/InputHandler.js";
 import { wireBossDeckModal } from "./ui/ModalSystem.js";
 import { renderCharacterSheet } from "./ui/CharacterSheet.js";
-import { initCombatHooks } from "./game/CombatManager.js";
 import "./utils/CueConfigLoader.js"; // Initialize cue configuration system
 import "./utils/TurnTracker.js"; // Initialize turn tracking system
+
+// Initialize combat hooks
+import("./game/CombatManager.js").then(combat => {
+  combat.initCombatHooks();
+  console.log("✅ Combat hooks initialized");
+});
 
 window.addEventListener("DOMContentLoaded", () => {
   console.log("Starting Corruption RPG - Professional Architecture");
@@ -55,9 +60,6 @@ window.addEventListener("DOMContentLoaded", () => {
   // Initialize UI systems
   wireControls();
   wireBossDeckModal();
-  
-  // Initialize combat system
-  initCombatHooks();
 
   // Scene change watcher for fallback cave entry
   let lastScene = state.scene;

@@ -1204,6 +1204,8 @@ function nearestPlayerToBoss(){
 let combatBooted = false;
 let combatBootStarted = false; // guard to prevent duplicate initiative enqueues
 export function startCaveCombat(){
+  console.debug('[CombatManager] startCaveCombat called!');
+  
   // Always ensure combat UI is mounted and synced, even if mode was already set.
   if (state.mode !== "combat") state.mode = "combat";
   if (typeof state.round !== "number" || state.round < 1) state.round = 1;
@@ -1211,6 +1213,8 @@ export function startCaveCombat(){
   if (!state.ui) state.ui = {};
   // Mark boss panel as the active right-dock view in combat
   state.ui.rightDock = 'boss';
+
+  console.debug('[CombatManager] About to render boss panel');
 
   // FORCE BOSS PANEL TO SHOW
   const rightDock = document.querySelector('#dock-panel, .right-panel, [data-dock="right"]');

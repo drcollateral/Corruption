@@ -7,17 +7,25 @@ function el(sel){ return document.querySelector(sel); }
 function esc(s){ return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
 
 export function renderBossPanel(){
+  console.debug('[BossPanel] renderBossPanel called, mode:', state.mode, 'boss exists:', !!state.boss);
+  
   // Hide/clear boss panel outside combat so it doesn't linger in overworld
   if (state.mode !== 'combat') {
     const content = el('#dock-content');
     if (content && content.querySelector('.boss-panel')) {
       content.innerHTML = '';
     }
+    console.debug('[BossPanel] Not in combat mode, cleared content');
     return; // do not render boss panel unless in combat mode
   }
 
   const panel = el("#dock-panel");
-  if (!panel) return;
+  if (!panel) {
+    console.error('[BossPanel] No #dock-panel element found!');
+    return;
+  }
+  
+  console.debug('[BossPanel] Found dock panel, rendering boss info');
   el("#dock-title").textContent = "Boss";
   const kv = panel.querySelector(".kv");
   const c  = el("#dock-content");
@@ -25,10 +33,14 @@ export function renderBossPanel(){
   const b = state.boss || { name:"—", hp:0, hpMax:0 };
   const hpPct = b.hpMax ? Math.max(0, Math.min(100, Math.round((b.hp/b.hpMax)*100))) : 0;
 
+  console.debug('[BossPanel] Boss data:', { name: b.name, hp: b.hp, hpMax: b.hpMax, hpPct });
+
   kv.innerHTML = `
     <div>Name</div><div>${esc(b.name)}</div>
     <div>HP</div><div>${b.hp}/${b.hpMax}</div>
   `;
+
+  console.debug('[BossPanel] Set kv innerHTML, kv element:', kv);
 
   // Render combat log from state (persisted across re-renders)
   const log = Array.isArray(state.combatLog) ? state.combatLog : [];
@@ -72,6 +84,9 @@ export function renderBossPanel(){
       <div id="combat-log" class="combat-log" aria-live="polite">${logHtml}</div>
     </div>
   `;
+
+  console.debug('[BossPanel] Set dock-content innerHTML, content element:', c);
+  console.debug('[BossPanel] Boss panel should now be visible');
 
   wireTips();
 }
