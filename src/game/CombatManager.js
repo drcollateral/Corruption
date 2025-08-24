@@ -5,7 +5,7 @@ import { spellsFor, passivesFor, ATTRIBUTE_SPELLS, SPELL_ID_ALIASES } from "../d
 import { mountActionBar, updateActionBar } from "../ui/ActionBar.js";
 import { renderBossPanel, syncBossPanel, bossLog } from "../ui/BossPanel.js";
 import { beginTargeting, cancelTargeting, isTargeting, beginTileSelection, beginSimpleTargeting } from "../systems/TargetingSystem.js?v=24";
-import { runInfernoRing, playBurnApplication, addBurnDebuffOverlay, playBurnTick, removeBurnDebuffOverlay, updateBurnOverlayPositions } from "../systems/EffectSystem.js";
+import { runInfernoRing, runInfernoPulse, playBurnApplication, addBurnDebuffOverlay, playBurnTick, removeBurnDebuffOverlay, updateBurnOverlayPositions } from "../systems/EffectSystem.js";
 import { addBuff, hasBuff, consumeBuff, getBuff, tickBuffs, clearBuff } from "../systems/BuffSystem.js";
 import { BossFactory, BossEntity } from "../entities/BossEntity.js";
 import { updatePlayerSpriteDirection } from "../data/PlayerSprites.js";
@@ -516,7 +516,7 @@ function triggerInfernoPulse(caster){
   
   if (dealt.length) {
     cue(`Inferno pulse hits ${dealt.join(", ")} for ${pulse}.`);
-    runInfernoRing({ col: caster.col, row: caster.row });
+    runInfernoPulse({ col: caster.col, row: caster.row }, { intensity: 2, duration: 3000 });
   }
   
   state.infernoPulse = pulse + 1; // Escalate for next pulse
@@ -1593,6 +1593,30 @@ function updateTurnTracker() {
     turnTracker.updateDisplay();
   }
 }
+
+// Test function for inferno pulse animation (can be called from console)
+window.testInfernoPulse = function(intensity = 1, col = null, row = null) {
+  const gridN = state.grid?.cells ?? 15;
+  const origin = {
+    col: col || Math.ceil(gridN / 2),
+    row: row || Math.ceil(gridN / 2)
+  };
+  
+  console.log(`🔥 Testing Inferno Pulse - Intensity: ${intensity}, Origin: (${origin.col}, ${origin.row})`);
+  runInfernoPulse(origin, { intensity: intensity, duration: 3000 });
+};
+
+// Test function for comparing with inferno ring
+window.testInfernoRing = function(col = null, row = null) {
+  const gridN = state.grid?.cells ?? 15;
+  const origin = {
+    col: col || Math.ceil(gridN / 2),
+    row: row || Math.ceil(gridN / 2)
+  };
+  
+  console.log(`🔥 Testing Inferno Ring - Origin: (${origin.col}, ${origin.row})`);
+  runInfernoRing(origin);
+};
 
 
 

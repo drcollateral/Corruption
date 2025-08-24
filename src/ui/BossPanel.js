@@ -93,7 +93,11 @@ export function renderBossPanel(){
 
 export function syncBossPanel(){
   // Only refresh boss panel if it's the active right-dock view
-  if (state.ui && state.ui.rightDock && state.ui.rightDock !== 'boss') return;
+  console.debug('[BossPanel] syncBossPanel called, rightDock:', state.ui?.rightDock, 'mode:', state.mode);
+  if (state.ui && state.ui.rightDock && state.ui.rightDock !== 'boss') {
+    console.debug('[BossPanel] Skipping sync - rightDock is not boss:', state.ui.rightDock);
+    return;
+  }
   renderBossPanel();
 }
 

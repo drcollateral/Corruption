@@ -2,7 +2,6 @@
  * Modern Combat Bridge - Professional Architecture
  * Connects new OOP systems with legacy game state
  */
-import { ActionSystem } from './systems/ActionSystem.js';
 import { TargetingSystem } from './systems/TargetingSystem.js';
 import { UIManager } from './ui/UIManager.js';
 import { BossSystem } from './systems/BossSystem.js';
@@ -10,7 +9,6 @@ import { EventBus } from './core/EventBus.js';
 import { state } from './core/GameState.js'; // Import state directly
 
 // Global instances
-let actionSystem = null;
 let targetingSystem = null;
 let uiManager = null;
 let bossSystem = null;
@@ -21,7 +19,6 @@ export async function initializeModernCombat() {
   console.log('Initializing modern combat system...');
   
   eventBus = new EventBus();
-  actionSystem = new ActionSystem(eventBus);
   targetingSystem = new TargetingSystem(eventBus);
   uiManager = new UIManager(eventBus);
   bossSystem = new BossSystem(eventBus);
@@ -139,9 +136,9 @@ export function replaceLegacyCombat() {
   };
 
   window.castSpell = async function(spellId, caster) {
-    if (actionSystem) {
-      return await actionSystem.executeAction(caster, spellId);
-    }
+    // ActionSystem removed - spell casting handled by legacy CombatManager
+    console.log('castSpell called but ActionSystem removed');
+    return null;
   };
 
   window.beginTargeting = function(spell) {

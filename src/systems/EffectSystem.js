@@ -164,6 +164,71 @@ export function runInfernoRing(origin, opts={}){
   setTimeout(() => scorch.remove(), 4000);
 }
 
+/**
+ * Creates an intense inferno pulse animation at a specific location.
+ * This is a more focused, powerful pulse effect than the expanding ring.
+ */
+export function runInfernoPulse(origin, opts = {}) {
+  const root = ensureFxRoot();
+  if (!root) return;
+  
+  const gridN = state.grid?.cells ?? 15;
+  const o = origin || { col: Math.ceil(gridN/2), row: Math.ceil(gridN/2) };
+  const duration = opts.duration || 2000;
+  
+  // Create energy waves (3 concentric pulses)
+  for (let wave = 0; wave < 3; wave++) {
+    setTimeout(() => {
+      const energyWave = document.createElement("div");
+      energyWave.className = `inferno-pulse-wave wave-${wave + 1}`;
+      energyWave.style.left = `calc(((${o.col} - 1) * 100%) / var(--grid-cells))`;
+      energyWave.style.top = `calc(((${o.row} - 1) * 100%) / var(--grid-cells))`;
+      root.appendChild(energyWave);
+      
+      setTimeout(() => energyWave.remove(), 1500);
+    }, wave * 200);
+  }
+  
+  // Create heat distortion effect
+  const heatDistortion = document.createElement("div");
+  heatDistortion.className = "inferno-pulse-distortion";
+  heatDistortion.style.left = `calc(((${o.col} - 1) * 100%) / var(--grid-cells))`;
+  heatDistortion.style.top = `calc(((${o.row} - 1) * 100%) / var(--grid-cells))`;
+  root.appendChild(heatDistortion);
+  
+  // Create flame jets around the pulse (fixed number, no intensity scaling)
+  const jetCount = 8;
+  for (let i = 0; i < jetCount; i++) {
+    setTimeout(() => {
+      const flameJet = document.createElement("div");
+      flameJet.className = "inferno-pulse-jet";
+      flameJet.style.left = `calc(((${o.col} - 0.5) * 100%) / var(--grid-cells))`;
+      flameJet.style.top = `calc(((${o.row} - 0.5) * 100%) / var(--grid-cells))`;
+      flameJet.style.setProperty("--angle", `${(i * (360 / jetCount)) + Math.random() * 30}deg`);
+      flameJet.style.setProperty("--delay", `${Math.random() * 200}ms`);
+      root.appendChild(flameJet);
+      
+      setTimeout(() => flameJet.remove(), 1200);
+    }, Math.random() * 300);
+  }
+  
+  // Screen flash effect
+  const flash = document.createElement("div");
+  flash.className = "inferno-pulse-flash";
+  flash.style.position = "fixed";
+  flash.style.inset = "0";
+  flash.style.zIndex = "1000";
+  flash.style.pointerEvents = "none";
+  document.body.appendChild(flash);
+  
+  setTimeout(() => flash.remove(), 300);
+  
+  // Cleanup
+  setTimeout(() => {
+    heatDistortion.remove();
+  }, duration);
+}
+
 // Burn effect functions
 export function playBurnApplication(col, row, width = 1, height = 1) {
   console.log('Playing burn application at', col, row, 'size:', width, height);
